@@ -16,4 +16,9 @@ compile_commands.json
 GRTAGS
 GPATH
 GTAGS
+.gitmodules
+deps/googletest
+deps/jsoncpp
+deps/libevent
+log/
 #*#
