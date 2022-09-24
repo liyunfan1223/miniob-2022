@@ -76,6 +76,45 @@ RC Db::create_table(const char *table_name, int attribute_count, const AttrInfo 
   return RC::SUCCESS;
 }
 
+RC Db::drop_table(const char* table_name)
+{
+  auto it = opened_tables_.find(table_name);
+  if (it == opened_tables_.end())
+  {
+    return SCHEMA_TABLE_NOT_EXIST; // 找不到表，要返回错误，测试程序中也会校验这种场景
+  }
+  Table* table = it->second;
+  RC rc = table->destroy(path_.c_str()); // 让表自己销毁资源
+  if(rc != RC::SUCCESS) return rc;
+
+  opened_tables_.erase(it); // 删除成功的话，从表list中将它删除
+  delete table;
+  return RC::SUCCESS;
+}
+
+//RC Db::drop_table(const char* table_name)
+//{
+//  RC rc = RC::SUCCESS;
+//  //TODO 从表list(opened_tables_)中找出表指针
+//  auto it = opened_tables_.find(table_name);
+//  //TODO 找不到表，要返回错误
+//  if (it == opened_tables_.end()) {
+//    LOG_WARN("%s isn't exists.", table_name);
+//    return RC::SCHEMA_TABLE_NOT_EXIST;
+//  }
+//  //TODO 调用 table->destroy 函数，让表自己销毁资源
+//  Table *table = opened_tables_[table_name];
+//  rc = table->destroy(path_.c_str());
+//  if (rc != RC::SUCCESS) {
+//    LOG_ERROR("Failed to drop table %s.", table_name);
+//    return rc;
+//  }
+//  //TODO 删除成功的话，从表list中将它删除
+//  opened_tables_.erase(table_name);
+//  LOG_INFO("Drop table success. table name=%s", table_name);
+//  return RC::SUCCESS;
+//}
+
 Table *Db::find_table(const char *table_name) const
 {
   std::unordered_map<std::string, Table *>::const_iterator iter = opened_tables_.find(table_name);
