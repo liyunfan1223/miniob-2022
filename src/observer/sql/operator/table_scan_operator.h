@@ -34,7 +34,7 @@ public:
   RC close() override;
 
   Tuple * current_tuple() override;
-
+  Table * table();
   // int tuple_cell_num() const override
   // {
   //   return tuple_.cell_num();

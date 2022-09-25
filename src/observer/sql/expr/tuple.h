@@ -44,9 +44,17 @@ public:
   {
     this->alias_ = alias;
   }
+  void set_table_alias(const char *table_alias)
+  {
+    this->table_alias_ = table_alias;
+  }
   const char *alias() const
   {
     return alias_;
+  }
+  const char *table_alias() const
+  {
+    return table_alias_;
   }
 
   Expression *expression() const
@@ -55,6 +63,7 @@ public:
   }
 
 private:
+  const char *table_alias_ = nullptr;
   const char *alias_ = nullptr;
   Expression *expression_ = nullptr;
 };
@@ -173,6 +182,106 @@ private:
   std::vector<Tuple *> tuples_;
 };
 */
+
+class JoinTuple : public Tuple
+{
+public:
+  JoinTuple() = default;
+  virtual ~JoinTuple()
+  {
+    for (TupleCellSpec *spec : speces_) {
+      delete spec;
+    }
+    speces_.clear();
+  }
+
+  void set_records(std::vector<Record *> *records)
+  {
+    this->records_ = records;
+  }
+
+  void add_schema(const Table *table, const std::vector<FieldMeta> *fields)
+  {
+    for (auto &field : *fields)
+    {
+      speces_.push_back(new TupleCellSpec(new FieldExpr(table, &field)));
+    }
+  }
+
+  int cell_num() const override
+  {
+    return speces_.size();
+  }
+
+  RC cell_at(int index, TupleCell &cell) const override
+  {
+    if (index < 0 || index >= static_cast<int>(speces_.size())) {
+      LOG_WARN("invalid argument. index=%d", index);
+      return RC::INVALID_ARGUMENT;
+    }
+
+    const TupleCellSpec *spec = speces_[index];
+    FieldExpr *field_expr = (FieldExpr *)spec->expression();
+    const FieldMeta *field_meta = field_expr->field().meta();
+    cell.set_type(field_meta->type());
+    cell.set_data(records_->at(record_index(index))->data() + field_meta->offset());
+    cell.set_length(field_meta->len());
+    return RC::SUCCESS;
+  }
+
+  RC find_cell(const Field &field, TupleCell &cell) const override
+  {
+    const char *table_name = field.table_name();
+    const char *field_name = field.field_name();
+    for (size_t i = 0; i < speces_.size(); ++i) {
+      const FieldExpr * field_expr = (const FieldExpr *)speces_[i]->expression();
+      const Field &field = field_expr->field();
+      if ((0 == strcmp(table_name, field.table_name())) and (0 == strcmp(field_name, field.field_name()))) {
+        return cell_at(i, cell);
+      }
+    }
+    return RC::NOTFOUND;
+  }
+
+  RC cell_spec_at(int index, const TupleCellSpec *&spec) const override
+  {
+    if (index < 0 || index >= static_cast<int>(speces_.size())) {
+      LOG_WARN("invalid argument. index=%d", index);
+      return RC::INVALID_ARGUMENT;
+    }
+    spec = speces_[index];
+    return RC::SUCCESS;
+  }
+
+  std::vector<Record *> *records()
+  {
+    return records_;
+  }
+
+  const std::vector<Record *> *records() const
+  {
+    return records_;
+  }
+
+  int32_t record_index(int32_t index) const {
+    for (int ri = 0; ri < (int32_t)sum_.size() - 1; ri++) {
+      if (sum_[ri + 1] > index) {
+        return ri;
+      }
+    }
+    return (int32_t)sum_.size() - 1;
+  }
+
+  void add_sum(int32_t current_sum)
+  {
+    sum_.push_back(current_sum);
+  }
+
+private:
+  std::vector<int32_t> sum_;
+  std::vector<Record *> *records_;
+  std::vector<TupleCellSpec *> speces_;
+};
 
 class ProjectTuple : public Tuple
 {

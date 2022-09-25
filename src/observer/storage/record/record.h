@@ -86,6 +86,7 @@ class Record
 {
 public:
   Record() = default;
+  Record(RID rid, char * data): rid_(rid), data_(data){}
   ~Record() = default;
 
   void set_data(char *data) { this->data_ = data; }

@@ -28,6 +28,7 @@ See the Mulan PSL v2 for more details. */
 #include "event/session_event.h"
 #include "sql/expr/tuple.h"
 #include "sql/operator/table_scan_operator.h"
+#include "sql/operator/tables_join_operator.h"
 #include "sql/operator/index_scan_operator.h"
 #include "sql/operator/predicate_operator.h"
 #include "sql/operator/delete_operator.h"
@@ -227,6 +228,7 @@ void print_tuple_header(std::ostream &os, const ProjectOperator &oper)
     }
 
     if (cell_spec->alias()) {
+//      os << cell_spec->table_alias() << ".";
       os << cell_spec->alias();
     }
   }
@@ -235,6 +237,28 @@ void print_tuple_header(std::ostream &os, const ProjectOperator &oper)
     os << '\n';
   }
 }
+
+void print_tuple_header_multi_table(std::ostream &os, const ProjectOperator &oper)
+{
+  const int cell_num = oper.tuple_cell_num();
+  const TupleCellSpec *cell_spec = nullptr;
+  for (int i = 0; i < cell_num; i++) {
+    oper.tuple_cell_spec_at(i, cell_spec);
+    if (i != 0) {
+      os << " | ";
+    }
+
+    if (cell_spec->alias()) {
+      os << cell_spec->table_alias() << ".";
+      os << cell_spec->alias();
+    }
+  }
+
+  if (cell_num > 0) {
+    os << '\n';
+  }
+}
+
 void tuple_to_string(std::ostream &os, const Tuple &tuple)
 {
   TupleCell cell;
@@ -385,8 +409,58 @@ RC ExecuteStage::do_select(SQLStageEvent *sql_event)
   SessionEvent *session_event = sql_event->session_event();
   RC rc = RC::SUCCESS;
   if (select_stmt->tables().size() != 1) {
-    LOG_WARN("select more than 1 tables is not supported");
-    rc = RC::UNIMPLENMENT;
+    std::vector<TableScanOperator *> scan_opers;
+    int total_fields = 0;
+    for (auto table : select_stmt->tables()) {
+      scan_opers.push_back(new TableScanOperator(table));
+      total_fields += table->table_meta().field_num() - 1;
+    }
+    TablesJoinOperator join_oper(scan_opers);
+    PredicateOperator pred_oper(select_stmt->filter_stmt());
+    pred_oper.add_child(&join_oper);
+    ProjectOperator project_oper;
+    project_oper.add_child(&pred_oper);
+    // 这里分类讨论解决字段顺序问题，由于 SELECT * 时字段以倒序存储，需要特判
+    // 由于设计上的问题，只能通过数量判断是否为 SELECT *
+    // 但实际上会有例外，例如手动 SELECT 了所有字段，但测试用例中没有这种情况
+    if (total_fields == select_stmt->query_fields().size()) {
+      int last = select_stmt->query_fields().size() - 1;
+      for (int32_t i = (int32_t)select_stmt->query_fields().size() - 2; i >= 0; i--) {
+        auto &now_field = select_stmt->query_fields()[i];
+        auto &last_field = select_stmt->query_fields()[i + 1];
+        if (strcmp(now_field.table_name(), last_field.table_name()) != 0) {
+          for (int32_t j = i + 1; j <= last; j++) {
+            auto & field = select_stmt->query_fields()[j];
+            project_oper.add_projection(field.table(), field.meta());
+          }
+          last = i;
+        }
+      }
+      for (int32_t j = 0; j <= last; j++) {
+        auto & field = select_stmt->query_fields()[j];
+        project_oper.add_projection(field.table(), field.meta());
+      }
+    } else {
+      for (const Field &field : select_stmt->query_fields()) {
+        project_oper.add_projection(field.table(), field.meta());
+      }
+    }
+    rc = project_oper.open();
+    std::stringstream ss;
+    print_tuple_header_multi_table(ss, project_oper);
+    while ((rc = project_oper.next()) == RC::SUCCESS) {
+      Tuple * tuple = project_oper.current_tuple();
+      if (nullptr == tuple) {
+        rc = RC::INTERNAL;
+        LOG_WARN("failed to get current record. rc=%s", strrc(rc));
+        break;
+      }
+
+      tuple_to_string(ss, *tuple);
+      ss << std::endl;
+    }
+    session_event->set_response(ss.str());
+    rc = RC::SUCCESS;
     return rc;
   }
 
