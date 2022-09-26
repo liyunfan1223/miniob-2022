@@ -1,6 +1,9 @@
 CURRENT_DIR=$(cd `dirname $0`; pwd)
 
 cd $CURRENT_DIR
+rm -rf deps/googletest
+rm -rf deps/jsoncpp
+rm -rf deps/libevent
 git submodule update --init --recursive
 
 #build libevent
