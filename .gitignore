@@ -1,6 +1,3 @@
-./deps/libevent
-./deps/googletest
-./deps/jsoncpp
 build/*
 cmake-build-*/*
 .vscode/*
@@ -16,9 +13,6 @@ compile_commands.json
 GRTAGS
 GPATH
 GTAGS
-.gitmodules
-deps/googletest
-deps/jsoncpp
-deps/libevent
 log/
+deps/build
 #*#
