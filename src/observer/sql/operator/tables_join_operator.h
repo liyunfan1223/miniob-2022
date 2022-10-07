@@ -15,10 +15,9 @@ public:
   TablesJoinOperator(std::vector<TableScanOperator*> scan_opers, FilterStmt *filter_stmt)
   :scan_opers_(scan_opers), filter_stmt_(filter_stmt)
   {
-    field_length.push_back(0);
+    field_lengths_.push_back(0);
     current_index_ = 0;
-    record_length_ = 0;
-    tuple_length_ = 0;
+    field_length_ = 0;
     total_index_ = 1;
   }
 
@@ -45,19 +44,17 @@ public:
 private:
   RC cartesian_product_dfs_(int table_index);
   bool do_predicate_( std::vector<Record *> &records , int record_length);
-  int get_field_index_(FieldExpr * fieldExpr);
-  std::vector<int32_t> dfs_index_record_;
+  int32_t get_field_index_(FieldExpr * fieldExpr);
   std::vector<TableScanOperator*> scan_opers_;
   int32_t current_index_;
   int32_t total_index_;
-  int32_t record_length_;
-  int32_t tuple_length_;
-  std::vector<int32_t> field_length;
+  int32_t field_length_;
+  std::vector<int32_t> field_lengths_;
   std::vector<std::pair<int32_t, int32_t>> index_mul_;
   std::vector<std::vector<Record *>> records_;
   std::vector<std::vector<Record *>> product_records_;
   std::vector<Record *> current_records_;
-  JoinTuple tuple_, temp_tuple_;
+  JoinTuple tuple_;
   FilterStmt *filter_stmt_ = nullptr;
   std::vector<TupleCellSpec *> speces_;
 };

@@ -26,15 +26,14 @@ RC TablesJoinOperator::open()
       }
 
       tuple_.add_schema(scan_oper->table(), scan_oper->table()->table_meta().field_metas());
-      tuple_.add_sum(tuple_length_);
+      tuple_.add_sum(field_length_);
 
-      tuple_length_ += scan_oper->table()->table_meta().field_num();
-      field_length.push_back(tuple_length_);
-      record_length_ += table_records.size();
+      field_length_ += scan_oper->table()->table_meta().field_num();
+      field_lengths_.push_back(field_length_);
+
       index_mul_.push_back({(int32_t)table_records.size(), total_index_});
       total_index_ *= table_records.size();
       records_.push_back(table_records);
-      dfs_index_record_.push_back(0);
     } else {
       return rc;
     }
@@ -76,12 +75,14 @@ Tuple * TablesJoinOperator::current_tuple()
 RC TablesJoinOperator::cartesian_product_dfs_(int table_index)
 {
   // 剪枝
-  if (!do_predicate_(current_records_, field_length[table_index]))
+  if (!do_predicate_(current_records_, field_lengths_[table_index]))
     return SUCCESS;
-  if (table_index == (int32_t)dfs_index_record_.size()) {
+  // 回溯
+  if (table_index == (int32_t)field_lengths_.size()) {
     product_records_.push_back(current_records_);
     return SUCCESS;
   }
+  // 遍历
   auto current_row = records_[table_index];
   for (auto rec : records_[table_index]) {
     current_records_.push_back(rec);
@@ -91,7 +92,7 @@ RC TablesJoinOperator::cartesian_product_dfs_(int table_index)
   return SUCCESS;
 }
 
-int TablesJoinOperator::get_field_index_(FieldExpr * fieldExpr)
+int32_t TablesJoinOperator::get_field_index_(FieldExpr * fieldExpr)
 {
   const char *table_name = fieldExpr->field().table_name();
   const char *field_name = fieldExpr->field().field_name();
@@ -102,7 +103,7 @@ int TablesJoinOperator::get_field_index_(FieldExpr * fieldExpr)
       return i;
     }
   }
-  return -1;
+  return INT32_MAX;
 }
 
 bool TablesJoinOperator::do_predicate_( std::vector<Record *> &records, int record_length)
@@ -114,12 +115,14 @@ bool TablesJoinOperator::do_predicate_( std::vector<Record *> &records, int reco
   for (const FilterUnit *filter_unit : filter_stmt_->filter_units()) {
     Expression *left_expr = filter_unit->left();
     Expression *right_expr = filter_unit->right();
+    // 如果表达式为字段，且当前不可对其判断（未访问到相关表），则跳过
     if (left_expr->type() == ExprType::FIELD && get_field_index_((FieldExpr *)left_expr) >= record_length) {
       continue;
     }
     if (right_expr->type() == ExprType::FIELD && get_field_index_((FieldExpr *)right_expr) >= record_length) {
       continue;
     }
+
     tuple_.set_records(&records);
     CompOp comp = filter_unit->comp();
     TupleCell left_cell;
