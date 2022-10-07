@@ -14,5 +14,6 @@ GRTAGS
 GPATH
 GTAGS
 log/
+local/
 deps/build
 #*#

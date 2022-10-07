@@ -397,6 +397,7 @@ extern "C" int sql_parse(const char *st, Query *sqls);
 
 RC parse(const char *st, Query *sqln)
 {
+//  printf("asdfasdfasdfasdf\n");
   sql_parse(st, sqln);
 
   if (sqln->flag == SCF_ERROR)
