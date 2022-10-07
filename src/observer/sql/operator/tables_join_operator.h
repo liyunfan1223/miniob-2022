@@ -15,7 +15,6 @@ public:
   TablesJoinOperator(std::vector<TableScanOperator*> scan_opers, FilterStmt *filter_stmt)
   :scan_opers_(scan_opers), filter_stmt_(filter_stmt)
   {
-    field_lengths_.push_back(0);
     current_index_ = 0;
     field_length_ = 0;
     total_index_ = 1;

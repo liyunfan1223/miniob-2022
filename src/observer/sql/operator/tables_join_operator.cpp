@@ -75,8 +75,9 @@ Tuple * TablesJoinOperator::current_tuple()
 RC TablesJoinOperator::cartesian_product_dfs_(int table_index)
 {
   // 剪枝
-  if (!do_predicate_(current_records_, field_lengths_[table_index]))
+  if (!do_predicate_(current_records_,  table_index == 0 ? 0 : field_lengths_[table_index - 1])) {
     return SUCCESS;
+  }
   // 回溯
   if (table_index == (int32_t)field_lengths_.size()) {
     product_records_.push_back(current_records_);
