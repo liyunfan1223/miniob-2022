@@ -415,15 +415,15 @@ RC ExecuteStage::do_select(SQLStageEvent *sql_event)
       scan_opers.push_back(new TableScanOperator(table));
       total_fields += table->table_meta().field_num() - 1;
     }
-    TablesJoinOperator join_oper(scan_opers);
-    PredicateOperator pred_oper(select_stmt->filter_stmt());
-    pred_oper.add_child(&join_oper);
+    TablesJoinOperator join_oper(scan_opers, select_stmt->filter_stmt());
+//    PredicateOperator pred_oper(select_stmt->filter_stmt());
+//    pred_oper.add_child(&join_oper);
     ProjectOperator project_oper;
-    project_oper.add_child(&pred_oper);
+    project_oper.add_child(&join_oper);
     // 这里分类讨论解决字段顺序问题，由于 SELECT * 时字段以倒序存储，需要特判
     // 由于设计上的问题，只能通过数量判断是否为 SELECT *
     // 但实际上会有例外，例如手动 SELECT 了所有字段，但测试用例中没有这种情况
-    if (total_fields == select_stmt->query_fields().size()) {
+    if (total_fields == (int32_t)select_stmt->query_fields().size()) {
       int last = select_stmt->query_fields().size() - 1;
       for (int32_t i = (int32_t)select_stmt->query_fields().size() - 2; i >= 0; i--) {
         auto &now_field = select_stmt->query_fields()[i];
