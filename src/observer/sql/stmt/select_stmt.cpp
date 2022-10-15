@@ -34,9 +34,6 @@ static void wildcard_fields(Table *table, std::vector<Field> &field_metas)
   for (int i = table_meta.sys_field_num(); i < field_num; i++) {
     field_metas.push_back(Field(table, table_meta.field(i)));
   }
-//  for (int i = field_num - 1; i >= table_meta.sys_field_num(); i--) {
-//    field_metas.push_back(Field(table, table_meta.field(i)));
-//  }
 }
 
 RC SelectStmt::create(Db *db, const Selects &select_sql, Stmt *&stmt)
@@ -49,7 +46,7 @@ RC SelectStmt::create(Db *db, const Selects &select_sql, Stmt *&stmt)
   // collect tables in `from` statement
   std::vector<Table *> tables;
   std::unordered_map<std::string, Table *> table_map;
-  for (int32_t i = (int32_t)select_sql.relation_num - 1; i >= 0; i--) {
+  for (size_t i = 0; i < select_sql.relation_num; i++) {
     const char *table_name = select_sql.relations[i];
     if (nullptr == table_name) {
       LOG_WARN("invalid argument. relation name is null. index=%d", i);

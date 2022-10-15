@@ -23,33 +23,11 @@ See the Mulan PSL v2 for more details. */
 #define MAX_ERROR_MESSAGE 20
 #define MAX_DATA 50
 
-typedef enum {
-  AGG_MAX,
-  AGG_MIN,
-  AGG_COUNT,
-  AGG_AVG
-} AggType;
-
 //属性结构体
 typedef struct {
   char *relation_name;   // relation name (may be NULL) 表名
   char *attribute_name;  // attribute name              属性名
-  int is_agg;
-  AggType aggType;
 } RelAttr;
-
-typedef struct {
-  char *relation_name;   // relation name (may be NULL) 表名
-  char *attribute_name;  // attribute name              属性名
-} GroupAttr;
-
-typedef enum { OrderAsc, OrderDesc } OrderType;
-
-typedef struct {
-  char *relation_name;   // relation name (may be NULL) 表名
-  char *attribute_name;  // attribute name              属性名
-  OrderType type;
-} OrderAttr;
 
 typedef enum {
   EQUAL_TO,     //"="     0
@@ -96,10 +74,6 @@ typedef struct {
   char *relations[MAX_NUM];       // relations in From clause
   size_t condition_num;           // Length of conditions in Where clause
   Condition conditions[MAX_NUM];  // conditions in Where clause
-  size_t group_num;
-  GroupAttr group_attributes[MAX_NUM];    // attrs in Select clause
-  size_t order_num;
-  OrderAttr order_attributes[MAX_NUM];
 } Selects;
 
 // struct of insert
@@ -229,8 +203,6 @@ void selects_append_attribute(Selects *selects, RelAttr *rel_attr);
 void selects_append_relation(Selects *selects, const char *relation_name);
 void selects_append_conditions(Selects *selects, Condition conditions[], size_t condition_num);
 void selects_destroy(Selects *selects);
-
-void group_append_attribute(Selects *selects, GroupAttr *group_attr);
 
 void inserts_init(Inserts *inserts, const char *relation_name, Value values[], size_t value_num);
 void inserts_destroy(Inserts *inserts);

@@ -19,8 +19,7 @@ typedef struct ParserContext {
   Value values[MAX_NUM];
   Condition conditions[MAX_NUM];
   CompOp comp;
-  char id[MAX_NUM];
-  OrderType order_type;
+	char id[MAX_NUM];
 } ParserContext;
 
 //获取子串
@@ -106,14 +105,6 @@ ParserContext *get_context(yyscan_t scanner)
         NE
         INNER
         JOIN
-        MAX
-        MIN
-        COUNT
-        AVG
-        GROUP
-        BY
-        ORDER
-        ASC
 
 %union {
   struct _Attr *attr;
@@ -347,7 +338,7 @@ update:			/*  update 语句的语法解析树*/
 		}
     ;
 select:				/*  select 语句的语法解析树*/
-    SELECT select_attr FROM ID inner_join_list rel_list where group order SEMICOLON
+    SELECT select_attr FROM ID inner_join_list rel_list where SEMICOLON
 		{
 			// CONTEXT->ssql->sstr.selection.relations[CONTEXT->from_length++]=$4;
 			selects_append_relation(&CONTEXT->ssql->sstr.selection, $4);
@@ -367,40 +358,20 @@ select:				/*  select 语句的语法解析树*/
 
 select_attr:
     STAR {  
-	RelAttr attr;
-	relation_attr_init(&attr, NULL, "*");
- 	selects_append_attribute(&CONTEXT->ssql->sstr.selection, &attr);
-    }
+			RelAttr attr;
+			relation_attr_init(&attr, NULL, "*");
+			selects_append_attribute(&CONTEXT->ssql->sstr.selection, &attr);
+		}
     | ID attr_list {
-        RelAttr attr;
-	relation_attr_init(&attr, NULL, $1);
-	selects_append_attribute(&CONTEXT->ssql->sstr.selection, &attr);
-    }
-    | ID DOT ID attr_list {
-        RelAttr attr;
-	relation_attr_init(&attr, $1, $3);
-	selects_append_attribute(&CONTEXT->ssql->sstr.selection, &attr);
-    }
-    | MAX LBRACE ID RBRACE attr_list {
-	RelAttr attr;
-	relation_attr_aggr_init(&attr, NULL, $3, AGG_MAX);
-	selects_append_attribute(&CONTEXT->ssql->sstr.selection, &attr);
-    }
-    | MIN LBRACE ID RBRACE attr_list {
-	RelAttr attr;
-	relation_attr_aggr_init(&attr, NULL, $3, AGG_MIN);
-	selects_append_attribute(&CONTEXT->ssql->sstr.selection, &attr);
-    }
-    | COUNT LBRACE ID RBRACE attr_list {
-	RelAttr attr;
-	relation_attr_aggr_init(&attr, NULL, $3, AGG_COUNT);
-	selects_append_attribute(&CONTEXT->ssql->sstr.selection, &attr);
-    }
-    | AVG LBRACE ID RBRACE attr_list {
-	RelAttr attr;
-	relation_attr_aggr_init(&attr, NULL, $3, AGG_AVG);
-	selects_append_attribute(&CONTEXT->ssql->sstr.selection, &attr);
-    }
+			RelAttr attr;
+			relation_attr_init(&attr, NULL, $1);
+			selects_append_attribute(&CONTEXT->ssql->sstr.selection, &attr);
+		}
+  	| ID DOT ID attr_list {
+			RelAttr attr;
+			relation_attr_init(&attr, $1, $3);
+			selects_append_attribute(&CONTEXT->ssql->sstr.selection, &attr);
+		}
     ;
 
 inner_join_list:
@@ -598,73 +569,7 @@ condition:
 			// $$->right_attr.attribute_name=$7;
     }
     ;
-group:
-    /* empty */
-    | GROUP BY group_attr {
 
-    }
-    ;
-group_attr:
-    ID group_attr_list {
-        GroupAttr group_attr;
-	group_attr_init(&group_attr, NULL, $1);
-	group_append_attribute(&CONTEXT->ssql->sstr.selection, &group_attr);
-    }
-    | ID DOT ID group_attr_list {
-        GroupAttr group_attr;
-	group_attr_init(&group_attr, $1, $3);
-	group_append_attribute(&CONTEXT->ssql->sstr.selection, &group_attr);
-    }
-    ;
-group_attr_list:
-    /* empty */
-    | COMMA ID group_attr_list {
-	GroupAttr group_attr;
-	group_attr_init(&group_attr, NULL, $2);
-	group_append_attribute(&CONTEXT->ssql->sstr.selection, &group_attr);
-    }
-    | COMMA ID DOT ID group_attr_list {
-        GroupAttr group_attr;
-    	group_attr_init(&group_attr, $2, $4);
-    	group_append_attribute(&CONTEXT->ssql->sstr.selection, &group_attr);
-    }
-    ;
-
-order:
-    /* empty */
-    | ORDER BY order_attr_list {
-    }
-    ;
-order_attr_list:
-    /* empty */
-    | COMMA order_attr order_attr_list {
-    }
-    | order_attr order_attr_list {
-
-    }
-    ;
-order_attr:
-    ID order_type {
-        OrderAttr order_attr;
-	order_attr_init(&order_attr, NULL, $1, CONTEXT->order_type);
-	order_append_attribute(&CONTEXT->ssql->sstr.selection, &order_attr);
-    }
-    | ID DOT ID order_type {
-        OrderAttr order_attr;
-	order_attr_init(&order_attr, $1, $3, CONTEXT->order_type);
-	order_append_attribute(&CONTEXT->ssql->sstr.selection, &order_attr);
-    }
-    ;
-order_type:
-    ASC {
-    	CONTEXT->order_type = OrderAsc;
-    }
-    | DESC {
-    	CONTEXT->order_type = OrderDesc;
-    }
-    | /* empty */ {
-    	CONTEXT->order_type = OrderAsc;
-    }
 comOp:
   	  EQ { CONTEXT->comp = EQUAL_TO; }
     | LT { CONTEXT->comp = LESS_THAN; }

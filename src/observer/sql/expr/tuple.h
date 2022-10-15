@@ -78,9 +78,6 @@ public:
   virtual RC  cell_at(int index, TupleCell &cell) const = 0;
   virtual RC  find_cell(const Field &field, TupleCell &cell) const = 0;
 
-  virtual RC find_cell(const char * table_name, const char * field_name, TupleCell &cell) const {
-    return RC::UNIMPLENMENT;
-  }
   virtual RC  cell_spec_at(int index, const TupleCellSpec *&spec) const = 0;
 };
 
@@ -190,7 +187,6 @@ class JoinTuple : public Tuple
 {
 public:
   JoinTuple() = default;
-  JoinTuple(JoinTuple & rhs) = default;
   virtual ~JoinTuple()
   {
     for (TupleCellSpec *spec : speces_) {
@@ -201,7 +197,7 @@ public:
 
   void set_records(std::vector<Record *> *records)
   {
-    this->records_ = *records;
+    this->records_ = records;
   }
 
   void add_schema(const Table *table, const std::vector<FieldMeta> *fields)
@@ -228,7 +224,7 @@ public:
     FieldExpr *field_expr = (FieldExpr *)spec->expression();
     const FieldMeta *field_meta = field_expr->field().meta();
     cell.set_type(field_meta->type());
-    cell.set_data(records_.at(record_index(index))->data() + field_meta->offset());
+    cell.set_data(records_->at(record_index(index))->data() + field_meta->offset());
     cell.set_length(field_meta->len());
     return RC::SUCCESS;
   }
@@ -239,26 +235,14 @@ public:
     const char *field_name = field.field_name();
     for (size_t i = 0; i < speces_.size(); ++i) {
       const FieldExpr * field_expr = (const FieldExpr *)speces_[i]->expression();
-      const Field &exprField = field_expr->field();
-      if ((0 == strcmp(table_name, exprField.table_name())) and (0 == strcmp(field_name, exprField.field_name()))) {
+      const Field &field = field_expr->field();
+      if ((0 == strcmp(table_name, field.table_name())) and (0 == strcmp(field_name, field.field_name()))) {
         return cell_at(i, cell);
       }
     }
     return RC::NOTFOUND;
   }
 
-  RC find_cell(const char *table_name, const char *field_name, TupleCell &cell) const override
-  {
-    for (size_t i = 0; i < speces_.size(); ++i) {
-      const FieldExpr * field_expr = (const FieldExpr *)speces_[i]->expression();
-      const Field &exprField = field_expr->field();
-      if (( table_name == nullptr || (0 == strcmp(table_name, exprField.table_name())))
-          and (0 == strcmp(field_name, exprField.field_name()))) {
-        return cell_at(i, cell);
-      }
-    }
-    return RC::NOTFOUND;
-  }
   RC cell_spec_at(int index, const TupleCellSpec *&spec) const override
   {
     if (index < 0 || index >= static_cast<int>(speces_.size())) {
@@ -269,15 +253,15 @@ public:
     return RC::SUCCESS;
   }
 
-//  std::vector<Record *> *records()
-//  {
-//    return records_;
-//  }
-//
-//  const std::vector<Record *> *records() const
-//  {
-//    return records_;
-//  }
+  std::vector<Record *> *records()
+  {
+    return records_;
+  }
+
+  const std::vector<Record *> *records() const
+  {
+    return records_;
+  }
 
   int32_t record_index(int32_t index) const {
     for (int ri = 0; ri < (int32_t)sum_.size() - 1; ri++) {
@@ -295,7 +279,7 @@ public:
 
 private:
   std::vector<int32_t> sum_;
-  std::vector<Record *> records_;
+  std::vector<Record *> *records_;
   std::vector<TupleCellSpec *> speces_;
 };
 

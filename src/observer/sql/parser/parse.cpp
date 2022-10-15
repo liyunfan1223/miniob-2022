@@ -30,20 +30,6 @@ void relation_attr_init(RelAttr *relation_attr, const char *relation_name, const
     relation_attr->relation_name = nullptr;
   }
   relation_attr->attribute_name = strdup(attribute_name);
-  relation_attr->is_agg = false;
-}
-
-void relation_attr_aggr_init(RelAttr *relation_attr, const char *relation_name,
-    const char *attribute_name, AggType aggrType)
-{
-  if (relation_name != nullptr) {
-    relation_attr->relation_name = strdup(relation_name);
-  } else {
-    relation_attr->relation_name = nullptr;
-  }
-  relation_attr->attribute_name = strdup(attribute_name);
-  relation_attr->is_agg = true;
-  relation_attr->aggType = aggrType;
 }
 
 void relation_attr_destroy(RelAttr *relation_attr)
@@ -52,28 +38,6 @@ void relation_attr_destroy(RelAttr *relation_attr)
   free(relation_attr->attribute_name);
   relation_attr->relation_name = nullptr;
   relation_attr->attribute_name = nullptr;
-}
-
-void group_attr_init(GroupAttr *group_attr, const char *relation_name, const char *attribute_name)
-{
-  if (relation_name != nullptr) {
-    group_attr->relation_name = strdup(relation_name);
-  } else {
-    group_attr->relation_name = nullptr;
-  }
-  group_attr->attribute_name = strdup(attribute_name);
-}
-
-void order_attr_init(OrderAttr *order_attr, const char *relation_name, const char *attribute_name,
-    OrderType orderType)
-{
-  if (relation_name != nullptr) {
-    order_attr->relation_name = strdup(relation_name);
-  } else {
-    order_attr->relation_name = nullptr;
-  }
-  order_attr->attribute_name = strdup(attribute_name);
-  order_attr->type = orderType;
 }
 
 void value_init_integer(Value *value, int v)
@@ -148,14 +112,6 @@ void selects_init(Selects *selects, ...);
 void selects_append_attribute(Selects *selects, RelAttr *rel_attr)
 {
   selects->attributes[selects->attr_num++] = *rel_attr;
-}
-void group_append_attribute(Selects *selects, GroupAttr *group_attr)
-{
-  selects->group_attributes[selects->group_num++] = *group_attr;
-}
-void order_append_attribute(Selects *selects, OrderAttr *order_attr)
-{
-  selects->order_attributes[selects->order_num++] = *order_attr;
 }
 void selects_append_relation(Selects *selects, const char *relation_name)
 {

@@ -9,10 +9,10 @@
 
 class FilterStmt;
 
-class TablesJoinPredOperator : public Operator
+class TablesJoinOperator: public Operator
 {
 public:
-  TablesJoinPredOperator(std::vector<TableScanOperator*> scan_opers, FilterStmt *filter_stmt)
+  TablesJoinOperator(std::vector<TableScanOperator*> scan_opers, FilterStmt *filter_stmt)
   :scan_opers_(scan_opers), filter_stmt_(filter_stmt)
   {
     current_index_ = 0;
@@ -20,7 +20,7 @@ public:
     total_index_ = 1;
   }
 
-  virtual ~TablesJoinPredOperator() {
+  virtual ~TablesJoinOperator() {
       for (auto scan_oper : scan_opers_) {
         delete scan_oper;
       }
