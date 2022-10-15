@@ -7,7 +7,7 @@
 #include "sql/stmt/filter_stmt.h"
 #include "storage/common/field.h"
 
-RC TablesJoinOperator::open()
+RC TablesJoinPredOperator::open()
 {
   for (auto it = scan_opers_.rbegin(); it != scan_opers_.rend(); it++)
   {
@@ -44,7 +44,7 @@ RC TablesJoinOperator::open()
   return RC::SUCCESS;
 }
 
-RC TablesJoinOperator::next()
+RC TablesJoinPredOperator::next()
 {
   if (current_index_ >= (int32_t)product_records_.size()) {
     return RC::RECORD_EOF;
@@ -54,7 +54,7 @@ RC TablesJoinOperator::next()
   return RC::SUCCESS;
 }
 
-RC TablesJoinOperator::close()
+RC TablesJoinPredOperator::close()
 {
   RC rc = RC::SUCCESS;
   for (auto scan_oper : scan_opers_) {
@@ -66,13 +66,13 @@ RC TablesJoinOperator::close()
 }
 
 
-Tuple * TablesJoinOperator::current_tuple()
+Tuple *TablesJoinPredOperator::current_tuple()
 {
   tuple_.set_records(&current_records_);
   return &tuple_;
 }
 
-RC TablesJoinOperator::cartesian_product_dfs_(int table_index)
+RC TablesJoinPredOperator::cartesian_product_dfs_(int table_index)
 {
   // 剪枝
   if (!do_predicate_(current_records_,  table_index == 0 ? 0 : field_lengths_[table_index - 1])) {
@@ -93,7 +93,7 @@ RC TablesJoinOperator::cartesian_product_dfs_(int table_index)
   return SUCCESS;
 }
 
-int32_t TablesJoinOperator::get_field_index_(FieldExpr * fieldExpr)
+int32_t TablesJoinPredOperator::get_field_index_(FieldExpr * fieldExpr)
 {
   const char *table_name = fieldExpr->field().table_name();
   const char *field_name = fieldExpr->field().field_name();
@@ -107,7 +107,7 @@ int32_t TablesJoinOperator::get_field_index_(FieldExpr * fieldExpr)
   return INT32_MAX;
 }
 
-bool TablesJoinOperator::do_predicate_( std::vector<Record *> &records, int record_length)
+bool TablesJoinPredOperator::do_predicate_( std::vector<Record *> &records, int record_length)
 {
   if (filter_stmt_ == nullptr || filter_stmt_->filter_units().empty()) {
     return true;
