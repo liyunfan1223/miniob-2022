@@ -34,6 +34,8 @@ See the Mulan PSL v2 for more details. */
 #include "sql/operator/delete_operator.h"
 #include "sql/operator/project_operator.h"
 #include "sql/operator/order_operator.h"
+#include "sql/operator/group_operator.h"
+
 #include "sql/stmt/stmt.h"
 #include "sql/stmt/select_stmt.h"
 #include "sql/stmt/update_stmt.h"
@@ -218,19 +220,39 @@ void end_trx_if_need(Session *session, Trx *trx, bool all_right)
   }
 }
 
-void print_tuple_header(std::ostream &os, const ProjectOperator &oper)
+void print_tuple_header(std::ostream &os, Operator &oper)
 {
-  const int cell_num = oper.tuple_cell_num();
+  Tuple * tuple = oper.current_tuple();
+  const int cell_num = tuple->cell_num();
   const TupleCellSpec *cell_spec = nullptr;
   for (int i = 0; i < cell_num; i++) {
-    oper.tuple_cell_spec_at(i, cell_spec);
+    tuple->cell_spec_at(i, cell_spec);
     if (i != 0) {
       os << " | ";
     }
-
+    switch (cell_spec->agg_type) {
+      case AGG_AVG:
+        os << "AVG(";
+        break;
+      case AGG_MIN:
+        os << "MIN(";
+        break;
+      case AGG_MAX:
+        os << "MAX(";
+        break;
+      case AGG_COUNT:
+        os << "COUNT(";
+        break;
+      default:
+        break;
+    }
     if (cell_spec->alias()) {
 //      os << cell_spec->table_alias() << ".";
       os << cell_spec->alias();
+    }
+
+    if (cell_spec->agg_type != AGG_NONE) {
+      os << ")";
     }
   }
 
@@ -239,19 +261,40 @@ void print_tuple_header(std::ostream &os, const ProjectOperator &oper)
   }
 }
 
-void print_tuple_header_multi_table(std::ostream &os, const ProjectOperator &oper)
+void print_tuple_header_multi_table(std::ostream &os, Operator &oper)
 {
-  const int cell_num = oper.tuple_cell_num();
+  Tuple * tuple = oper.current_tuple();
+  const int cell_num = tuple->cell_num();
   const TupleCellSpec *cell_spec = nullptr;
   for (int i = 0; i < cell_num; i++) {
-    oper.tuple_cell_spec_at(i, cell_spec);
+    tuple->cell_spec_at(i, cell_spec);
     if (i != 0) {
       os << " | ";
     }
-
+    switch (cell_spec->agg_type) {
+      case AGG_AVG:
+        os << "AVG(";
+        break;
+      case AGG_MIN:
+        os << "MIN(";
+        break;
+      case AGG_MAX:
+        os << "MAX(";
+        break;
+      case AGG_COUNT:
+        os << "COUNT(";
+        break;
+      default:
+        break;
+    }
     if (cell_spec->alias()) {
-      os << cell_spec->table_alias() << ".";
+      if (cell_spec->table_alias() != nullptr) {
+        os << cell_spec->table_alias() << ".";
+      }
       os << cell_spec->alias();
+    }
+    if (cell_spec->agg_type != AGG_NONE) {
+      os << ")";
     }
   }
 
@@ -404,35 +447,92 @@ IndexScanOperator *try_to_create_index_scan_operator(FilterStmt *filter_stmt)
   return oper;
 }
 
+RC add_projection(Db * db, std::vector<Table *> & tables, size_t attr_num, RelAttr * attributes, ProjectOperator *oper) {
+  for (size_t i = 0; i < attr_num; i++) {
+    auto & attr = attributes[i];
+    // select *
+    if (attr.relation_name == nullptr && 0 == strcmp(attr.attribute_name, "*")) {
+      if (attr.aggType == AGG_COUNT) {
+        oper->add_projection(nullptr, "*", AGG_COUNT);
+      } else {
+        for (int j = (int)tables.size() - 1; j >= 0; j--) {
+          auto &table = tables[j];
+          const TableMeta &table_meta = table->table_meta();
+          const int field_num = table_meta.field_num();
+          for (int k = table_meta.sys_field_num(); k < field_num; k++) {
+            oper->add_projection(table, table_meta.field(k), attr.aggType);
+          }
+        }
+      }
+    } else {
+      Table * table = attr.relation_name == nullptr ? tables[0] : db->find_table(attr.relation_name);
+      // select id.*
+      if (0 == strcmp(attr.attribute_name, "*")) {
+        const TableMeta &table_meta = table->table_meta();
+        const int field_num = table_meta.field_num();
+        for (int j = table_meta.sys_field_num(); j < field_num; j++) {
+          oper->add_projection(table, table_meta.field(j), attr.aggType);
+        }
+      } else {
+        // select id.id
+        oper->add_projection(table, table->table_meta().field(attr.attribute_name), attr.aggType);
+      }
+    }
+  }
+  return SUCCESS;
+}
+
 RC ExecuteStage::do_select(SQLStageEvent *sql_event)
 {
   SelectStmt *select_stmt = (SelectStmt *)(sql_event->stmt());
   SessionEvent *session_event = sql_event->session_event();
   Selects & selects = sql_event->query()->sstr.selection;
+  Db *db = session_event->session()->get_current_db();
   RC rc = RC::SUCCESS;
   std::vector<TableScanOperator *> scan_opers;
-  for (auto table : select_stmt->tables()) {
+
+  std::vector<Table *> tables;
+  for (size_t i = 0; i < selects.relation_num; i++) {
+    tables.push_back(db->find_table(selects.relations[i]));
+  }
+  for (auto table : tables) {
     scan_opers.push_back(new TableScanOperator(table));
   }
   TablesJoinPredOperator join_pred_oper(scan_opers, select_stmt->filter_stmt());
-  OrderByOperator order_by_oper(selects.order_num, selects.order_attributes);
+  OrderOperator order_by_oper(selects.order_num, selects.order_attributes);
   order_by_oper.add_child(&join_pred_oper);
 
   ProjectOperator project_oper;
   project_oper.add_child(&order_by_oper);
-  for (const Field &field : select_stmt->query_fields()) {
-    project_oper.add_projection(field.table(), field.meta());
+  add_projection(db, tables, selects.attr_num, selects.attributes, &project_oper);
+
+  Operator * output_oper = nullptr;
+
+  bool has_agg = false;
+  for (size_t i = 0; i < selects.attr_num; i++) {
+    if (selects.attributes[i].is_agg) {
+      has_agg = true;
+    }
   }
 
-  rc = project_oper.open();
+  GroupOperator groupOperator(selects.group_num, selects.group_attributes);
+  groupOperator.add_child(&project_oper);
+  if (has_agg) {
+    output_oper = &groupOperator;
+  } else {
+    output_oper = &project_oper;
+  }
+
+
+  rc = output_oper->open();
   std::stringstream ss;
   if (select_stmt->tables().size() != 1) {
-    print_tuple_header_multi_table(ss, project_oper);
+    print_tuple_header_multi_table(ss, *output_oper);
   } else {
-    print_tuple_header(ss, project_oper);
+    print_tuple_header(ss, *output_oper);
   }
-  while ((rc = project_oper.next()) == RC::SUCCESS) {
-    Tuple * tuple = project_oper.current_tuple();
+  while ((rc = output_oper->next()) == RC::SUCCESS) {
+    Tuple * tuple = output_oper->current_tuple();
     if (nullptr == tuple) {
       rc = RC::INTERNAL;
       LOG_WARN("failed to get current record. rc=%s", strrc(rc));

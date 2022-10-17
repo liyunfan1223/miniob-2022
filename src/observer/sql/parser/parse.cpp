@@ -31,6 +31,7 @@ void relation_attr_init(RelAttr *relation_attr, const char *relation_name, const
   }
   relation_attr->attribute_name = strdup(attribute_name);
   relation_attr->is_agg = false;
+  relation_attr->aggType = AGG_NONE;
 }
 
 void relation_attr_aggr_init(RelAttr *relation_attr, const char *relation_name,

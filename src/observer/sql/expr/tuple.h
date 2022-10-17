@@ -62,9 +62,12 @@ public:
     return expression_;
   }
 
+  AggType agg_type = AGG_NONE;
+  AttrType attr_type = UNDEFINED;
 private:
   const char *table_alias_ = nullptr;
   const char *alias_ = nullptr;
+
   Expression *expression_ = nullptr;
 };
 
@@ -342,6 +345,12 @@ public:
   {
     return tuple_->find_cell(field, cell);
   }
+
+  RC find_cell(const char *table_name, const char *field_name, TupleCell &cell) const override
+  {
+    return tuple_->find_cell(table_name, field_name, cell);
+  }
+
   RC cell_spec_at(int index, const TupleCellSpec *&spec) const override
   {
     if (index < 0 || index >= static_cast<int>(speces_.size())) {
@@ -350,7 +359,190 @@ public:
     spec = speces_[index];
     return RC::SUCCESS;
   }
-private:
+
   std::vector<TupleCellSpec *> speces_;
+private:
   Tuple *tuple_ = nullptr;
+};
+
+class GroupTuple: public Tuple {
+public:
+  ~GroupTuple() override = default;
+  int cell_num() const override
+  {
+    return speces_.size();
+  }
+  RC cell_at(int index, TupleCell &cell) const override
+  {
+    cell = tuple_cells_[index];
+    return SUCCESS;
+  }
+  RC find_cell(const Field &field, TupleCell &cell) const override
+  {
+    const char *table_name = field.table_name();
+    const char *field_name = field.field_name();
+    for (size_t i = 0; i < speces_.size(); ++i) {
+      const FieldExpr * field_expr = (const FieldExpr *)speces_[i]->expression();
+      const Field &exprField = field_expr->field();
+      if ((0 == strcmp(table_name, exprField.table_name())) and (0 == strcmp(field_name, exprField.field_name()))) {
+        return cell_at(i, cell);
+      }
+    }
+    return RC::NOTFOUND;
+  }
+  RC find_cell(const char *table_name, const char *field_name, TupleCell &cell) const override
+  {
+    for (size_t i = 0; i < speces_.size(); ++i) {
+      const FieldExpr * field_expr = (const FieldExpr *)speces_[i]->expression();
+      const Field &exprField = field_expr->field();
+      if ((0 == strcmp(table_name, exprField.table_name())) and (0 == strcmp(field_name, exprField.field_name()))) {
+        return cell_at(i, cell);
+      }
+    }
+    return RC::NOTFOUND;
+  }
+  RC cell_spec_at(int index, const TupleCellSpec *&spec) const override
+  {
+    spec = speces_[index];
+    return SUCCESS;
+  }
+  RC get_count(int idx, std::vector<Tuple *> tmp_tuples, AttrType attrType, TupleCell & tuple_cell)
+  {
+    tuple_cell.set_type(INTS);
+    tuple_cell.set_data((char *)(new int32_t(tmp_tuples.size())));
+    tuple_cell.set_length(sizeof(int32_t));
+    return SUCCESS;
+  }
+
+  RC get_max(int idx, std::vector<Tuple *> tmp_tuples, AttrType attrType, TupleCell & tuple_cell)
+  {
+    tuple_cell.set_type(attrType);
+    switch (attrType) {
+      case INTS: {
+        int mx = INT32_MIN;
+        for (auto tuple : tmp_tuples) {
+          TupleCell tmp_cell;
+          tuple->cell_at(idx, tmp_cell);
+          mx = std::max(mx, *(int *)tmp_cell.data());
+        }
+        tuple_cell.set_data((char *)(new int32_t(mx)));
+        tuple_cell.set_length(sizeof(int32_t));
+        break;
+      }
+      case FLOATS: {
+        float mx = -1e20;
+        for (auto tuple : tmp_tuples) {
+          TupleCell tmp_cell;
+          tuple->cell_at(idx, tmp_cell);
+          mx = std::max(mx, *(float *)tmp_cell.data());
+        }
+        tuple_cell.set_data((char *)(new float (mx)));
+        tuple_cell.set_length(sizeof(float));
+        break;
+      }
+      default:
+        return RC::GENERIC_ERROR;
+    }
+    return RC::SUCCESS;
+  }
+
+  RC get_min(int idx, std::vector<Tuple *> tmp_tuples, AttrType attrType, TupleCell & tuple_cell)
+  {
+    tuple_cell.set_type(attrType);
+    switch (attrType) {
+      case INTS: {
+        int mn = INT32_MAX;
+        for (auto tuple : tmp_tuples) {
+          TupleCell tmp_cell;
+          tuple->cell_at(idx, tmp_cell);
+          mn = std::min(mn, *(int *)tmp_cell.data());
+        }
+        tuple_cell.set_data((char *)(new int32_t(mn)));
+        tuple_cell.set_length(sizeof(int32_t));
+        break;
+      }
+      case FLOATS: {
+        float mn = 1e20;
+        for (auto tuple : tmp_tuples) {
+          TupleCell tmp_cell;
+          tuple->cell_at(idx, tmp_cell);
+          mn = std::min(mn, *(float *)tmp_cell.data());
+        }
+        tuple_cell.set_data((char *)(new float (mn)));
+        tuple_cell.set_length(sizeof(float));
+        break;
+      }
+      default:
+        return RC::GENERIC_ERROR;
+    }
+    return RC::SUCCESS;
+  }
+
+  RC get_avg(int idx, std::vector<Tuple *> tmp_tuples, AttrType attrType, TupleCell & tuple_cell)
+  {
+    tuple_cell.set_type(FLOATS);
+    float sum = 0;
+    int count = 0;
+    switch (attrType) {
+      case INTS: {
+        for (auto tuple : tmp_tuples) {
+          TupleCell tmp_cell;
+          tuple->cell_at(idx, tmp_cell);
+          sum += *(int *)tmp_cell.data();
+          count++;
+        }
+        break;
+      }
+      case FLOATS: {
+        for (auto tuple : tmp_tuples) {
+          TupleCell tmp_cell;
+          tuple->cell_at(idx, tmp_cell);
+          sum += *(float *)tmp_cell.data();
+          count++;
+        }
+        break;
+      }
+      default:
+        return RC::GENERIC_ERROR;
+    }
+    float precised_ans = (int)(sum / count * 100) / 100.0;
+    tuple_cell.set_data((char *)(new float(precised_ans)));
+    tuple_cell.set_length(sizeof(float));
+    return RC::SUCCESS;
+  }
+
+  RC get_none(int idx, std::vector<Tuple *> tmp_tuples, AttrType attrType, TupleCell & tuple_cell)
+  {
+    tuple_cell.set_type(attrType);
+    TupleCell tmp_cell;
+    tmp_tuples[0]->cell_at(idx, tmp_cell);
+    tuple_cell = tmp_cell;
+    return SUCCESS;
+  }
+
+  RC set_tuple_cells(int idx, std::vector<Tuple *> tmp_tuples) {
+    AggType agg_type = speces_[idx]->agg_type;
+    AttrType attr_type = speces_[idx]->attr_type;
+    TupleCell tupleCell;
+    switch (agg_type) {
+      case AGG_COUNT:
+        get_count(idx, tmp_tuples, attr_type, tupleCell);
+        break;
+      case AGG_MAX:
+        get_max(idx, tmp_tuples, attr_type, tupleCell);
+        break;
+      case AGG_MIN:
+        get_min(idx, tmp_tuples, attr_type, tupleCell);
+        break;
+      case AGG_AVG:
+        get_avg(idx, tmp_tuples, attr_type, tupleCell);
+        break;
+      case AGG_NONE:
+        get_none(idx, tmp_tuples, attr_type, tupleCell);
+    }
+    tuple_cells_.push_back(tupleCell);
+    return SUCCESS;
+  }
+  std::vector<TupleCellSpec *> speces_;
+  std::vector<TupleCell> tuple_cells_;
 };

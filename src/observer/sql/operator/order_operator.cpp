@@ -5,7 +5,7 @@
 #include "order_operator.h"
 #include <algorithm>
 
-RC OrderByOperator::open()
+RC OrderOperator::open()
 {
   Operator * child = children_[0];
   RC res = child->open();
@@ -31,7 +31,7 @@ RC OrderByOperator::open()
   return res;
 }
 
-RC OrderByOperator::next()
+RC OrderOperator::next()
 {
   if (current_tuple_count_ >= (int32_t) all_tuples_.size()) {
     return RC::RECORD_EOF;
@@ -41,12 +41,12 @@ RC OrderByOperator::next()
   return RC::SUCCESS;
 }
 
-RC OrderByOperator::close()
+RC OrderOperator::close()
 {
   return children_[0]->close();
 }
 
-Tuple * OrderByOperator::current_tuple()
+Tuple *OrderOperator::current_tuple()
 {
   return tuple_;
 }

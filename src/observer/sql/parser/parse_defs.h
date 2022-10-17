@@ -27,7 +27,8 @@ typedef enum {
   AGG_MAX,
   AGG_MIN,
   AGG_COUNT,
-  AGG_AVG
+  AGG_AVG,
+  AGG_NONE,
 } AggType;
 
 //属性结构体

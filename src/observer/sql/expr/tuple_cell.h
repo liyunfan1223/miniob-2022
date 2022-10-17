@@ -38,7 +38,6 @@ public:
   void to_string(std::ostream &os) const;
 
   int compare(const TupleCell &other) const;
-
   const char *data() const
   {
     return data_;

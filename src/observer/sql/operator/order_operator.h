@@ -6,15 +6,15 @@
 
 #include "sql/operator/operator.h"
 
-class OrderByOperator : public Operator {
+class OrderOperator : public Operator {
 public:
-  OrderByOperator(size_t order_num, OrderAttr * order_attributes)
+  OrderOperator(size_t order_num, OrderAttr * order_attributes)
   :order_num_(order_num), order_attributes_(order_attributes)
   {
     current_tuple_count_ = 0;
   }
 
-  virtual ~OrderByOperator() {
+  virtual ~OrderOperator() {
 //    for (auto &tuple : all_tuples_) {
 //      delete tuple;
 //    }
