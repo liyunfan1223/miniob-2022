@@ -28,6 +28,7 @@ See the Mulan PSL v2 for more details. */
 #include "storage/index/index.h"
 #include "storage/index/bplus_tree_index.h"
 #include "storage/trx/trx.h"
+#include "storage/clog/clog.h"
 
 Table::~Table()
 {
@@ -51,7 +52,7 @@ Table::~Table()
 }
 
 RC Table::create(
-    const char *path, const char *name, const char *base_dir, int attribute_count, const AttrInfo attributes[])
+    const char *path, const char *name, const char *base_dir, int attribute_count, const AttrInfo attributes[], CLogManager *clog_manager)
 {
 
   if (common::is_blank(name)) {
@@ -114,6 +115,7 @@ RC Table::create(
   }
 
   base_dir_ = base_dir;
+  clog_manager_ = clog_manager;
   LOG_INFO("Successfully create table %s:%s", base_dir, name);
   return rc;
 }
@@ -154,49 +156,7 @@ RC Table::destroy(const char* dir) {
   return RC::SUCCESS;
 }
 
-//RC Table::destroy(const char* dir) {
-//  //刷新所有脏页
-//  RC rc = sync();
-//  if(rc != RC::SUCCESS) return rc;
-//
-//  //TODO 删除描述表元数据的文件
-//  std::string meta_file = table_meta_file(dir, name()); // 获取元数据文件路径(.table)
-//  if (unlink(meta_file.c_str()) != 0) { // unlink()返回值0表示成功 -1表示失败
-//    return RC::GENERIC_ERROR;
-//  }
-//
-//  //TODO 删除表数据文件
-//  std::string data_file = table_data_file(dir, name()); // 获取表数据文件路径(.data)
-//  if (unlink(data_file.c_str()) != 0) { // unlink()返回值0表示成功 -1表示失败
-//    return RC::GENERIC_ERROR;
-//  }
-//
-//  //TODO 清理所有的索引相关文件数据与索引元数据
-//  const int index_num = table_meta_.index_num();
-//  for (int i = 0; i < index_num; i++) { // 遍历每个索引
-//    //
-//    ((BplusTreeIndex*)indexes_[i])->close();
-//    const IndexMeta *index_meta = table_meta_.index(i);
-//    const FieldMeta *field_meta = table_meta_.field(index_meta->field());
-//    if (field_meta == nullptr) {
-//      LOG_ERROR("Found invalid index meta info which has a non-exists field. table=%s, index=%s, field=%s",
-//                name(),
-//                index_meta->name(),
-//                index_meta->field());
-//      // skip cleanup
-//      // do all cleanup action in destructive Table function
-//      return RC::GENERIC_ERROR;
-//    }
-//    std::string index_file = table_index_file(dir, name(), index_meta->name()); // 获取索引文件名(.index)
-//    if (unlink(index_file.c_str()) != 0) {
-//      LOG_ERROR("Failed to remove index file=%s, errno=%d", index_file.c_str(), errno);
-//      return RC::GENERIC_ERROR;
-//    }
-//  }
-//  return RC::SUCCESS;
-//}
-
-RC Table::open(const char *meta_file, const char *base_dir)
+RC Table::open(const char *meta_file, const char *base_dir, CLogManager *clog_manager)
 {
   // 加载元数据文件
   std::fstream fs;
@@ -253,6 +213,10 @@ RC Table::open(const char *meta_file, const char *base_dir)
       return rc;
     }
     indexes_.push_back(index);
+  }
+
+  if (clog_manager_ == nullptr) {
+    clog_manager_ = clog_manager;
   }
   return rc;
 }
@@ -341,8 +305,36 @@ RC Table::insert_record(Trx *trx, Record *record)
     }
     return rc;
   }
+
+  if (trx != nullptr) {
+    // append clog record
+    CLogRecord *clog_record = nullptr;
+    rc = clog_manager_->clog_gen_record(CLogType::REDO_INSERT, trx->get_current_id(), clog_record, name(), table_meta_.record_size(), record);
+    if (rc != RC::SUCCESS) {
+      LOG_ERROR("Failed to create a clog record. rc=%d:%s", rc, strrc(rc));
+      return rc;
+    }
+    rc = clog_manager_->clog_append_record(clog_record);
+    if (rc != RC::SUCCESS) {
+      return rc;
+    }
+  }
   return rc;
 }
+
+RC Table::recover_insert_record(Record *record)
+{
+  RC rc = RC::SUCCESS;
+
+  rc = record_handler_->recover_insert_record(record->data(), table_meta_.record_size(), &record->rid());
+  if (rc != RC::SUCCESS) {
+    LOG_ERROR("Insert record failed. table name=%s, rc=%d:%s", table_meta_.name(), rc, strrc(rc));
+    return rc;
+  }
+
+  return rc;
+}
+
 RC Table::insert_record(Trx *trx, int value_num, const Value *values)
 {
   if (value_num <= 0 || nullptr == values) {
@@ -359,7 +351,6 @@ RC Table::insert_record(Trx *trx, int value_num, const Value *values)
 
   Record record;
   record.set_data(record_data);
-  // record.valid = true;
   rc = insert_record(trx, &record);
   delete[] record_data;
   return rc;
@@ -734,17 +725,44 @@ RC Table::delete_record(Trx *trx, ConditionFilter *filter, int *deleted_count)
 RC Table::delete_record(Trx *trx, Record *record)
 {
   RC rc = RC::SUCCESS;
+  
+  rc = delete_entry_of_indexes(record->data(), record->rid(), false);  // 重复代码 refer to commit_delete
+  if (rc != RC::SUCCESS) {
+    LOG_ERROR("Failed to delete indexes of record (rid=%d.%d). rc=%d:%s",
+                record->rid().page_num, record->rid().slot_num, rc, strrc(rc));
+    return rc;
+  } 
+  
+  rc = record_handler_->delete_record(&record->rid());
+  if (rc != RC::SUCCESS) {
+    LOG_ERROR("Failed to delete record (rid=%d.%d). rc=%d:%s",
+                record->rid().page_num, record->rid().slot_num, rc, strrc(rc));
+    return rc;
+  }
+
   if (trx != nullptr) {
     rc = trx->delete_record(this, record);
-  } else {
-    rc = delete_entry_of_indexes(record->data(), record->rid(), false);  // 重复代码 refer to commit_delete
+    
+    CLogRecord *clog_record = nullptr;
+    rc = clog_manager_->clog_gen_record(CLogType::REDO_DELETE, trx->get_current_id(), clog_record, name(), 0, record);
     if (rc != RC::SUCCESS) {
-      LOG_ERROR("Failed to delete indexes of record (rid=%d.%d). rc=%d:%s",
-                 record->rid().page_num, record->rid().slot_num, rc, strrc(rc));
-    } else {
-      rc = record_handler_->delete_record(&record->rid());
+      LOG_ERROR("Failed to create a clog record. rc=%d:%s", rc, strrc(rc));
+      return rc;
+    }
+    rc = clog_manager_->clog_append_record(clog_record);
+    if (rc != RC::SUCCESS) {
+      return rc;
     }
   }
+
+  return rc;
+}
+
+RC Table::recover_delete_record(Record *record)
+{
+  RC rc = RC::SUCCESS;
+  rc = record_handler_->delete_record(&record->rid());
+  
   return rc;
 }
 
@@ -931,12 +949,7 @@ IndexScanner *Table::find_index_for_scan(const ConditionFilter *filter)
 
 RC Table::sync()
 {
-  RC rc = data_buffer_pool_->flush_all_pages();
-  if (rc != RC::SUCCESS) {
-    LOG_ERROR("Failed to flush table's data pages. table=%s, rc=%d:%s", name(), rc, strrc(rc));
-    return rc;
-  }
-
+  RC rc = RC::SUCCESS;
   for (Index *index : indexes_) {
     rc = index->sync();
     if (rc != RC::SUCCESS) {

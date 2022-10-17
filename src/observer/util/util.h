@@ -9,36 +9,11 @@ MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 See the Mulan PSL v2 for more details. */
 
 //
-// Created by Wangyunlai on 2022/07/08.
+// Created by wangyunlai on 2022/9/28
 //
 
 #pragma once
 
-#include <functional>
+#include <string>
 
-namespace common {
-
-class DeferHelper
-{
-public: 
-  DeferHelper(const std::function<void()> defer) : defer_(std::move(defer))
-  {}
-
-  ~DeferHelper()
-  {
-    if (defer_) {
-      defer_();
-    }
-  }
-
-private:
-  const std::function<void()> defer_;
-};
-
-} // namespace common
-
-#define AA(B, C) B##C
-
-#define BB(B, C) AA(B,C)
-
-#define DEFER(callback) common::DeferHelper BB(defer_helper_, __LINE__)(callback)
+std::string double2string(double v);
