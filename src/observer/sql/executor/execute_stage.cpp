@@ -147,7 +147,7 @@ void ExecuteStage::handle_request(common::StageEvent *event)
       do_insert(sql_event);
     } break;
     case StmtType::UPDATE: {
-      //do_update((UpdateStmt *)stmt, session_event);
+      do_update((UpdateStmt *)stmt, session_event);
     } break;
     case StmtType::DELETE: {
       do_delete(sql_event);
@@ -682,6 +682,61 @@ RC ExecuteStage::do_insert(SQLStageEvent *sql_event)
   return rc;
 }
 
+RC ExecuteStage::do_update(UpdateStmt *stmt, SessionEvent *session_event)
+{
+  if (stmt == nullptr) {
+    LOG_WARN("cannot find statement");
+    return RC::GENERIC_ERROR;
+  }
+
+  UpdateStmt *update_stmt = (UpdateStmt *)stmt;
+  Table *table = update_stmt->table();
+  const FieldMeta *field = table->table_meta().field(update_stmt->field_name());
+
+  TableScanOperator scan_oper(update_stmt->table());
+  PredicateOperator pred_oper(update_stmt->filter_stmt());
+  pred_oper.add_child(&scan_oper);
+
+  std::vector<Operator *> children;
+  children.push_back(&pred_oper);
+
+
+  if (children.size() != 1) {
+    LOG_WARN("delete operator must has 1 child");
+    session_event->set_response("FAILURE\n");
+    return RC::INTERNAL;
+  }
+
+  Operator *child = children[0];
+  RC rc = child->open();
+  if (rc != RC::SUCCESS) {
+    LOG_WARN("failed to open child operator: %s", strrc(rc));
+    session_event->set_response("FAILURE\n");
+    return rc;
+  }
+
+  while (RC::SUCCESS == (rc = child->next())) {
+    Tuple *tuple = child->current_tuple();
+    if (nullptr == tuple) {
+      LOG_WARN("failed to get current record: %s", strrc(rc));
+      session_event->set_response("FAILURE\n");
+      return rc;
+    }
+
+    RowTuple *row_tuple = static_cast<RowTuple *>(tuple);
+    Record &record = row_tuple->record();
+    rc = table->update_record(nullptr, &record,field, update_stmt->value());
+    if (rc != RC::SUCCESS) {
+      LOG_WARN("failed to delete record: %s", strrc(rc));
+      session_event->set_response("FAILURE\n");
+      return rc;
+    }
+  }
+
+  session_event->set_response("SUCCESS\n");
+  return RC::SUCCESS;
+}
+
 RC ExecuteStage::do_delete(SQLStageEvent *sql_event)
 {
   Stmt *stmt = sql_event->stmt();
@@ -697,6 +752,7 @@ RC ExecuteStage::do_delete(SQLStageEvent *sql_event)
   }
 
   DeleteStmt *delete_stmt = (DeleteStmt *)stmt;
+
   TableScanOperator scan_oper(delete_stmt->table());
   PredicateOperator pred_oper(delete_stmt->filter_stmt());
   pred_oper.add_child(&scan_oper);

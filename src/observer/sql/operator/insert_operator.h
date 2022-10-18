@@ -35,4 +35,5 @@ public:
 
 private:
   InsertStmt *insert_stmt_ = nullptr;
+
 };
