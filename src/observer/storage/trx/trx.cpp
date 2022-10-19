@@ -305,6 +305,12 @@ RC Trx::rollback_delete(Table *table, Record &record)
   set_record_trx_id(table, record, 0, false);
   return RC::SUCCESS;
 }
+//add rollback_insert
+//RC Trx::rollback_insert(Table *table, Record &record)
+//{
+//  set_record_trx_id(table, record, 0, true);
+//  return RC::SUCCESS;
+//}
 
 bool Trx::is_visible(Table *table, const Record *record)
 {

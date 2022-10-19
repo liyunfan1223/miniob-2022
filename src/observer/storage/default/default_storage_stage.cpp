@@ -268,9 +268,10 @@ RC insert_record_from_file(
       } break;
     }
   }
-
+//  insert_record 函数参数连带修改
+  Record  record;
   if (RC::SUCCESS == rc) {
-    rc = table->insert_record(nullptr, field_num, record_values.data());
+    rc = table->insert_record(nullptr, field_num, record_values.data(),record);
     if (rc != RC::SUCCESS) {
       errmsg << "insert failed.";
     }

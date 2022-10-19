@@ -376,7 +376,7 @@ RC Table::recover_insert_record(Record *record)
   return rc;
 }
 
-RC Table::insert_record(Trx *trx, int value_num, const Value *values)
+RC Table::insert_record(Trx *trx, int value_num, const Value *values,Record  &record)
 {
   if (value_num <= 0 || nullptr == values) {
     LOG_ERROR("Invalid argument. table name: %s, value num=%d, values=%p", name(), value_num, values);
@@ -390,9 +390,11 @@ RC Table::insert_record(Trx *trx, int value_num, const Value *values)
     return rc;
   }
 
-  Record record;
+//  Record record;
+//  record.set_data(record_data);
+//  rc = insert_record(trx, &record);
   record.set_data(record_data);
-  rc = insert_record(trx, &record);
+  rc = insert_record(trx, & record);
   delete[] record_data;
   return rc;
 }

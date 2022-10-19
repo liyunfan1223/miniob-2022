@@ -103,11 +103,16 @@ typedef struct {
   OrderAttr order_attributes[MAX_NUM];
 } Selects;
 
+typedef struct {
+  size_t value_num;       // Length of values
+  Value values[MAX_NUM];  // values to insert
+} InsertRecord;
+
 // struct of insert
 typedef struct {
   char *relation_name;    // Relation to insert into
-  size_t value_num;       // Length of values
-  Value values[MAX_NUM];  // values to insert
+  size_t record_num;
+  InsertRecord records[MAX_NUM];
 } Inserts;
 
 // struct of delete
@@ -234,7 +239,8 @@ void selects_destroy(Selects *selects);
 
 void group_append_attribute(Selects *selects, GroupAttr *group_attr);
 
-void inserts_init(Inserts *inserts, const char *relation_name, Value values[], size_t value_num);
+void inserts_init(Inserts *inserts, const char *relation_name, InsertRecord records[], size_t record_num);
+void insert_record_init(InsertRecord *records, Value values[], size_t value_num);
 void inserts_destroy(Inserts *inserts);
 
 void deletes_init_relation(Deletes *deletes, const char *relation_name);

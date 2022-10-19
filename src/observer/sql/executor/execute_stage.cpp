@@ -640,22 +640,35 @@ RC ExecuteStage::do_desc_table(SQLStageEvent *sql_event)
 
 RC ExecuteStage::do_insert(SQLStageEvent *sql_event)
 {
-  Stmt *stmt = sql_event->stmt();
   SessionEvent *session_event = sql_event->session_event();
   Session *session = session_event->session();
   Db *db = session->get_current_db();
   Trx *trx = session->current_trx();
   CLogManager *clog_manager = db->get_clog_manager();
+  Inserts & inserts = sql_event->query()->sstr.insertion;
+  const char *table_name = inserts.relation_name;
+  Table *table = db->find_table(table_name);
+  //循环，有一个insert不成功需要回滚
+//  RC rc = table->insert_record(trx, inserts.records[0].value_num, inserts.records[0].values);
+  RC rc = RC::SUCCESS;
+  //  insert_record 函数参数连带修改
+  Record record;
+  Record recordlist[inserts.record_num];
+  int rollback_idx=0;
 
-  if (stmt == nullptr) {
-    LOG_WARN("cannot find statement");
-    return RC::GENERIC_ERROR;
+  for (int i = 0; i < inserts.record_num; i++) {
+    rc= table->insert_record(trx, inserts.records[i].value_num, inserts.records[i].values, record);
+//    记录所有成功的operation的地址。operations_是trx的private变量。调用table->rollback_insert()。在rollback之后要delete_operatoin。
+//    考虑并发情况会更加复杂
+    //  delete record会处理这个部分
+    if (rc == RC::SUCCESS) {
+      recordlist[i] = record;
+    }else{
+      rollback_idx=i;
+      break;
+    };
+
   }
-
-  InsertStmt *insert_stmt = (InsertStmt *)stmt;
-  Table *table = insert_stmt->table();
-
-  RC rc = table->insert_record(trx, insert_stmt->value_amount(), insert_stmt->values());
   if (rc == RC::SUCCESS) {
     if (!session->is_trx_multi_operation_mode()) {
       CLogRecord *clog_record = nullptr;
@@ -664,13 +677,11 @@ RC ExecuteStage::do_insert(SQLStageEvent *sql_event)
         session_event->set_response("FAILURE\n");
         return rc;
       }
-
       rc = clog_manager->clog_append_record(clog_record);
       if (rc != RC::SUCCESS) {
         session_event->set_response("FAILURE\n");
         return rc;
-      } 
-
+      }
       trx->next_current_id();
       session_event->set_response("SUCCESS\n");
     } else {
@@ -678,7 +689,13 @@ RC ExecuteStage::do_insert(SQLStageEvent *sql_event)
     }
   } else {
     session_event->set_response("FAILURE\n");
+    //回滚本次操作的record,operation暂时不变
+    for (int j = 0; j < rollback_idx; j++) {
+      table->delete_record(trx,&recordlist[j]);
+    }
+
   }
+
   return rc;
 }
 
