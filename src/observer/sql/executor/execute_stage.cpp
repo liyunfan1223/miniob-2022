@@ -255,6 +255,9 @@ void print_tuple_header(std::ostream &os, Operator &oper)
       case AGG_COUNT:
         os << "COUNT(";
         break;
+      case AGG_SUM:
+        os << "SUM(";
+        break;
       default:
         break;
     }
@@ -295,6 +298,9 @@ void print_tuple_header_multi_table(std::ostream &os, Operator &oper)
         break;
       case AGG_COUNT:
         os << "COUNT(";
+        break;
+      case AGG_SUM:
+        os << "SUM(";
         break;
       default:
         break;
@@ -466,7 +472,7 @@ RC add_projection(Db * db, std::vector<Table *> & tables, size_t attr_num, RelAt
     if (attr.relation_name == nullptr && 0 == strcmp(attr.attribute_name, "*")) {
       if (attr.aggType == AGG_COUNT) {
         oper->add_projection(nullptr, "*", AGG_COUNT);
-      } else {
+      } else if (attr.aggType == AGG_NONE) {
         for (int j = (int)tables.size() - 1; j >= 0; j--) {
           auto &table = tables[j];
           const TableMeta &table_meta = table->table_meta();
@@ -475,6 +481,8 @@ RC add_projection(Db * db, std::vector<Table *> & tables, size_t attr_num, RelAt
             oper->add_projection(table, table_meta.field(k), attr.aggType);
           }
         }
+      } else {
+        return GENERIC_ERROR;
       }
     } else {
       Table * table = attr.relation_name == nullptr ? tables[0] : db->find_table(attr.relation_name);
@@ -489,6 +497,28 @@ RC add_projection(Db * db, std::vector<Table *> & tables, size_t attr_num, RelAt
         // select id.id
         oper->add_projection(table, table->table_meta().field(attr.attribute_name), attr.aggType);
       }
+    }
+  }
+  return SUCCESS;
+}
+
+RC check_attr_in_group(size_t attr_num, RelAttr * attrs, size_t group_num, GroupAttr * groups)
+{
+  for (size_t i = 0; i < attr_num; i++) {
+    RelAttr & attr = attrs[i];
+    if (attr.is_agg) continue;
+    bool in_group = false;
+    for (size_t j = 0; j < group_num; j++) {
+      GroupAttr & group = groups[j];
+      if ((strcmp(attr.attribute_name, group.attribute_name) == 0) &&
+          ((attr.relation_name == nullptr && group.relation_name == nullptr) || (
+              attr.relation_name != nullptr && group.relation_name != nullptr && strcmp(attr.relation_name, group.relation_name) == 0))
+          ) {
+        in_group = true;
+      }
+    }
+    if (!in_group) {
+      return GENERIC_ERROR;
     }
   }
   return SUCCESS;
@@ -516,8 +546,11 @@ RC ExecuteStage::do_select(SQLStageEvent *sql_event)
 
   ProjectOperator project_oper;
   project_oper.add_child(&order_by_oper);
-  add_projection(db, tables, selects.attr_num, selects.attributes, &project_oper);
-
+  rc = add_projection(db, tables, selects.attr_num, selects.attributes, &project_oper);
+  if (rc != SUCCESS) {
+    session_event->set_response("FAILURE\n");
+    return rc;
+  }
   Operator * output_oper = nullptr;
 
   bool has_agg = false;
@@ -530,6 +563,11 @@ RC ExecuteStage::do_select(SQLStageEvent *sql_event)
   GroupOperator groupOperator(selects.group_num, selects.group_attributes);
   groupOperator.add_child(&project_oper);
   if (has_agg) {
+    rc = check_attr_in_group(selects.attr_num, selects.attributes, selects.group_num, selects.group_attributes);
+    if (rc != SUCCESS) {
+      session_event->set_response("FAILURE\n");
+      return rc;
+    }
     output_oper = &groupOperator;
   } else {
     output_oper = &project_oper;

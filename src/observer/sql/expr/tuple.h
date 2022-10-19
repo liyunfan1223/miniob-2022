@@ -418,7 +418,7 @@ public:
   {
     tuple_cell.set_type(attrType);
     switch (attrType) {
-      case INTS: {
+      case INTS: case DATES: {
         int mx = INT32_MIN;
         for (auto tuple : tmp_tuples) {
           TupleCell tmp_cell;
@@ -427,8 +427,7 @@ public:
         }
         tuple_cell.set_data((char *)(new int32_t(mx)));
         tuple_cell.set_length(sizeof(int32_t));
-        break;
-      }
+      } break;
       case FLOATS: {
         float mx = -1e20;
         for (auto tuple : tmp_tuples) {
@@ -438,8 +437,28 @@ public:
         }
         tuple_cell.set_data((char *)(new float (mx)));
         tuple_cell.set_length(sizeof(float));
-        break;
-      }
+      } break;
+      case CHARS: {
+        char * mx = nullptr;
+        int mx_length = 0;
+        for (auto tuple : tmp_tuples) {
+          TupleCell tmp_cell;
+          tuple->cell_at(idx, tmp_cell);
+          if (mx == nullptr) {
+            mx = (char *)tmp_cell.data();
+            mx_length = tmp_cell.length();
+          } else {
+            if (strcmp(mx, (char *)tmp_cell.data()) < 0) {
+              mx = (char *)tmp_cell.data();
+              mx_length = tmp_cell.length();
+            }
+          }
+        }
+        char * new_data = (char *)malloc(sizeof(char) * mx_length);
+        memcpy(new_data, mx, mx_length);
+        tuple_cell.set_data(new_data);
+        tuple_cell.set_length(mx_length);
+      } break;
       default:
         return RC::GENERIC_ERROR;
     }
@@ -450,7 +469,7 @@ public:
   {
     tuple_cell.set_type(attrType);
     switch (attrType) {
-      case INTS: {
+      case INTS: case DATES: {
         int mn = INT32_MAX;
         for (auto tuple : tmp_tuples) {
           TupleCell tmp_cell;
@@ -472,6 +491,27 @@ public:
         tuple_cell.set_length(sizeof(float));
         break;
       }
+      case CHARS: {
+        char * mn = nullptr;
+        int mn_length = 0;
+        for (auto tuple : tmp_tuples) {
+          TupleCell tmp_cell;
+          tuple->cell_at(idx, tmp_cell);
+          if (mn == nullptr) {
+            mn = (char *)tmp_cell.data();
+            mn_length = tmp_cell.length();
+          } else {
+            if (strcmp(mn, (char *)tmp_cell.data()) > 0) {
+              mn = (char *)tmp_cell.data();
+              mn_length = tmp_cell.length();
+            }
+          }
+        }
+        char * new_data = (char *)malloc(sizeof(char) * mn_length);
+        memcpy(new_data, mn, mn_length);
+        tuple_cell.set_data(new_data);
+        tuple_cell.set_length(mn_length);
+      } break;
       default:
         return RC::GENERIC_ERROR;
     }
@@ -502,10 +542,104 @@ public:
         }
         break;
       }
+      case CHARS: {
+        for (auto tuple : tmp_tuples) {
+          TupleCell tmp_cell;
+          tuple->cell_at(idx, tmp_cell);
+          int length = tmp_cell.length();
+          int dot_count = 0;
+          int slice = 0;
+          const char * data = tmp_cell.data();
+          for (slice = 0; slice < length; slice++) {
+            if (data[slice] == '.' && dot_count == 0) {
+              dot_count++;
+              continue;
+            }
+            if (data[slice] >= '0' && data[slice] <= '9') {
+              continue;
+            }
+            break;
+          }
+          float val;
+          if (slice != 0) {
+            char *str = (char *)malloc(sizeof(char) * (slice + 1));
+            memcpy(str, data, slice);
+            str[slice] = '\0';
+            val = std::stof(str);
+          } else {
+            val = 0;
+          }
+          sum += val;
+          count++;
+        }
+      } break;
       default:
         return RC::GENERIC_ERROR;
     }
+    if (count == 0) {
+      count = 1;
+    }
     float precised_ans = (int)(sum / count * 100) / 100.0;
+    tuple_cell.set_data((char *)(new float(precised_ans)));
+    tuple_cell.set_length(sizeof(float));
+    return RC::SUCCESS;
+  }
+
+  RC get_sum(int idx, std::vector<Tuple *> tmp_tuples, AttrType attrType, TupleCell & tuple_cell)
+  {
+    tuple_cell.set_type(FLOATS);
+    float sum = 0;
+    switch (attrType) {
+      case INTS: {
+        for (auto tuple : tmp_tuples) {
+          TupleCell tmp_cell;
+          tuple->cell_at(idx, tmp_cell);
+          sum += *(int *)tmp_cell.data();
+        }
+        break;
+      }
+      case FLOATS: {
+        for (auto tuple : tmp_tuples) {
+          TupleCell tmp_cell;
+          tuple->cell_at(idx, tmp_cell);
+          sum += *(float *)tmp_cell.data();
+        }
+        break;
+      }
+      case CHARS: {
+        for (auto tuple : tmp_tuples) {
+          TupleCell tmp_cell;
+          tuple->cell_at(idx, tmp_cell);
+          int length = tmp_cell.length();
+          int dot_count = 0;
+          int slice = 0;
+          const char * data = tmp_cell.data();
+          for (slice = 0; slice < length; slice++) {
+            if (data[slice] == '.' && dot_count == 0) {
+              dot_count++;
+              continue;
+            }
+            if (data[slice] >= '0' && data[slice] <= '9') {
+              continue;
+            }
+            break;
+          }
+          float val;
+          if (slice != 0) {
+            char *str = (char *)malloc(sizeof(char) * (slice + 1));
+            memcpy(str, data, slice);
+            str[slice] = '\0';
+            val = std::stof(str);
+          } else {
+            val = 0;
+          }
+          sum += val;
+        }
+      } break;
+      default:
+        return RC::GENERIC_ERROR;
+    }
+    float precised_ans = (int)(sum * 100) / 100.0;
     tuple_cell.set_data((char *)(new float(precised_ans)));
     tuple_cell.set_length(sizeof(float));
     return RC::SUCCESS;
@@ -536,6 +670,9 @@ public:
         break;
       case AGG_AVG:
         get_avg(idx, tmp_tuples, attr_type, tupleCell);
+        break;
+      case AGG_SUM:
+        get_sum(idx, tmp_tuples, attr_type, tupleCell);
         break;
       case AGG_NONE:
         get_none(idx, tmp_tuples, attr_type, tupleCell);

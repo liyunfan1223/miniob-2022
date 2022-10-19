@@ -28,6 +28,7 @@ typedef enum {
   AGG_MIN,
   AGG_COUNT,
   AGG_AVG,
+  AGG_SUM,
   AGG_NONE,
 } AggType;
 

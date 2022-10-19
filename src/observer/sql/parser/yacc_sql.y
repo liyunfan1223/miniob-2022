@@ -114,6 +114,7 @@ ParserContext *get_context(yyscan_t scanner)
         MIN
         COUNT
         AVG
+        SUM
         GROUP
         BY
         ORDER
@@ -431,6 +432,9 @@ aggop:
     }
     | AVG {
 	CONTEXT->agg_type = AGG_AVG;
+    }
+    | SUM {
+    	CONTEXT->agg_type = AGG_SUM;
     }
     ;
 inner_join_list:
