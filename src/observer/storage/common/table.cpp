@@ -773,6 +773,11 @@ RC Table::update_record(Trx *trx, Record *record, const FieldMeta *field_meta, c
       memcpy(New_record.data() + field_meta->offset(), s, field_meta->len());
     }
     break;
+    case DATES: {
+      int v = *(int*)(value.data);
+      memcpy(New_record.data() + field_meta->offset(), &v, field_meta->len());
+    }
+    break;
     default: {
       LOG_PANIC("Unsupported field type. type=%d", field_meta->type());
     }

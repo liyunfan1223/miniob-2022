@@ -21,6 +21,26 @@ InsertStmt::InsertStmt(Table *table, const Value *values, int value_amount)
   : table_ (table), values_(values), value_amount_(value_amount)
 {}
 
+bool InsertStmt::check_date(int val)
+{
+  int y = val / 10000;
+  int m = val % 10000 / 100;
+  int d = val % 100;
+  if (y < 1000 || y > 9999) return 0;
+  if (m < 1 || m > 12) return 0;
+  int mx_day; // mx_day记录当月最大天数
+  if (m == 2) {
+    if (y % 4 == 0 && y % 100 != 0 || y % 400 == 0) mx_day = 29; // 闰年
+    else mx_day = 28;
+  } else if (m <= 7) {
+    if (m % 2 == 1) mx_day = 31;
+    else mx_day = 30;
+  } else if (m % 2 == 1) mx_day = 30;
+  else mx_day = 31;
+  if (d > mx_day) return 0;
+  return 1;
+}
+
 RC InsertStmt::create(Db *db, const Inserts &inserts, Stmt *&stmt)
 {
   const char *table_name = inserts.relation_name;
@@ -57,6 +77,13 @@ RC InsertStmt::create(Db *db, const Inserts &inserts, Stmt *&stmt)
       LOG_WARN("field type mismatch. table=%s, field=%s, field type=%d, value_type=%d", 
                table_name, field_meta->name(), field_type, value_type);
       return RC::SCHEMA_FIELD_TYPE_MISMATCH;
+    } else if (value_type == DATES) {
+      int val = *(int *)values[i].data;
+      if (!check_date(val)) {
+        LOG_WARN("date type invalid. table=%s, field=%s, field type=%d, value_type=%d",
+            table_name, field_meta->name(), field_type, value_type);
+        return RC::GENERIC_ERROR;
+      }
     }
   }
 

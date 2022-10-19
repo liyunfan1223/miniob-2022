@@ -37,6 +37,7 @@ public:
   Table *table() const {return table_;}
   const Value *values() const { return values_; }
   int value_amount() const { return value_amount_; }
+  static bool check_date(int val);
 
 private:
   Table *table_ = nullptr;

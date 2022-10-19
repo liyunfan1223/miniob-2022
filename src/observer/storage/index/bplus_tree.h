@@ -54,6 +54,9 @@ public:
     case CHARS: {
       return compare_string((void *)v1, attr_length_, (void *)v2, attr_length_);
     }
+    case DATES: {
+      return compare_int((void *)v1, (void *)v2);
+    }
     default:{
       LOG_ERROR("unknown attr type. %d", attr_type_);
       abort();
@@ -124,6 +127,9 @@ public:
       }
       return str;
     }
+    case DATES: {
+      return std::to_string(*(int*)v);
+    } break;
     default:{
       LOG_ERROR("unknown attr type. %d", attr_type_);
       abort();

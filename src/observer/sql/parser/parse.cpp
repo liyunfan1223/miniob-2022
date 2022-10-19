@@ -89,6 +89,21 @@ void value_init_float(Value *value, float v)
   value->data = malloc(sizeof(v));
   memcpy(value->data, &v, sizeof(v));
 }
+
+
+
+int value_init_date(Value *value, const char *v)
+{
+  value->type = DATES;
+  value->data = malloc(sizeof(int));
+
+  int y,m,d;
+  sscanf(v, "%d-%d-%d", &y, &m, &d);//not check return value eq 3, lex guarantee
+  int val = y * 10000 + m * 100 + d;
+  memcpy(value->data, &val, sizeof(int));
+  return -1;
+}
+
 void value_init_string(Value *value, const char *v)
 {
   value->type = CHARS;
@@ -454,7 +469,6 @@ extern "C" int sql_parse(const char *st, Query *sqls);
 
 RC parse(const char *st, Query *sqln)
 {
-//  printf("asdfasdfasdfasdf\n");
   sql_parse(st, sqln);
 
   if (sqln->flag == SCF_ERROR)

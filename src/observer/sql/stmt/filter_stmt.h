@@ -92,7 +92,7 @@ public:
 
   static RC create_filter_unit(Db *db, Table *default_table, std::unordered_map<std::string, Table *> *tables,
 			       const Condition &condition, FilterUnit *&filter_unit);
-
+  static bool check_date(int val);
 private:
   std::vector<FilterUnit *>  filter_units_; // 默认当前都是AND关系
 };

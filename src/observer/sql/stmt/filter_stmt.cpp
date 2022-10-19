@@ -78,6 +78,26 @@ RC get_table_and_field(Db *db, Table *default_table, std::unordered_map<std::str
   return RC::SUCCESS;
 }
 
+bool FilterStmt::check_date(int val)
+{
+  int y = val / 10000;
+  int m = val % 10000 / 100;
+  int d = val % 100;
+  if (y < 1000 || y > 9999) return 0;
+  if (m < 1 || m > 12) return 0;
+  int mx_day; // mx_day记录当月最大天数
+  if (m == 2) {
+    if ((y % 4 == 0 && y % 100 != 0) || y % 400 == 0) mx_day = 29; // 闰年
+    else mx_day = 28;
+  } else if (m <= 7) {
+    if (m % 2 == 1) mx_day = 31;
+    else mx_day = 30;
+  } else if (m % 2 == 1) mx_day = 30;
+  else mx_day = 31;
+  if (d > mx_day) return 0;
+  return 1;
+}
+
 RC FilterStmt::create_filter_unit(Db *db, Table *default_table, std::unordered_map<std::string, Table *> *tables,
 				  const Condition &condition, FilterUnit *&filter_unit)
 {
@@ -91,6 +111,9 @@ RC FilterStmt::create_filter_unit(Db *db, Table *default_table, std::unordered_m
 
   Expression *left = nullptr;
   Expression *right = nullptr;
+
+  AttrType left_attr, right_attr;
+
   if (condition.left_is_attr) {
     Table *table = nullptr;
     const FieldMeta *field = nullptr;
@@ -100,7 +123,16 @@ RC FilterStmt::create_filter_unit(Db *db, Table *default_table, std::unordered_m
       return rc;
     }
     left = new FieldExpr(table, field);
+    left_attr = ((FieldExpr *)left)->field().attr_type();
   } else {
+    if (condition.left_value.type == DATES) {
+      int val = *(int *)condition.left_value.data;
+      if (!check_date(val)) {
+        LOG_WARN("date type invalid.");
+        return GENERIC_ERROR;
+      }
+    }
+    left_attr = condition.left_value.type;
     left = new ValueExpr(condition.left_value);
   }
 
@@ -114,10 +146,24 @@ RC FilterStmt::create_filter_unit(Db *db, Table *default_table, std::unordered_m
       return rc;
     }
     right = new FieldExpr(table, field);
+    right_attr = ((FieldExpr *)right)->field().attr_type();
   } else {
+    if (condition.right_value.type == DATES) {
+      int val = *(int *)condition.right_value.data;
+      if (!check_date(val)) {
+        LOG_WARN("date type invalid.");
+        return GENERIC_ERROR;
+      }
+    }
+    right_attr = condition.right_value.type;
     right = new ValueExpr(condition.right_value);
   }
 
+  if (right_attr != left_attr &&
+      (right_attr == DATES || left_attr == DATES)) {
+    LOG_WARN("date type invalid.");
+    return GENERIC_ERROR;
+  }
   filter_unit = new FilterUnit;
   filter_unit->set_comp(comp);
   filter_unit->set_left(left);

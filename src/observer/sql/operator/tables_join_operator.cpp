@@ -6,6 +6,7 @@
 #include "table_scan_operator.h"
 #include "sql/stmt/filter_stmt.h"
 #include "storage/common/field.h"
+#include "util/comparator.h"
 
 RC TablesJoinPredOperator::open()
 {
