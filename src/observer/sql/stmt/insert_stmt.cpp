@@ -31,7 +31,7 @@ bool InsertStmt::check_date(int val)
   if (m < 1 || m > 12) return 0;
   int mx_day; // mx_day记录当月最大天数
   if (m == 2) {
-    if (y % 4 == 0 && y % 100 != 0 || y % 400 == 0) mx_day = 29; // 闰年
+    if ((y % 4 == 0 && y % 100 != 0) || y % 400 == 0) mx_day = 29; // 闰年
     else mx_day = 28;
   } else if (m <= 7) {
     if (m % 2 == 1) mx_day = 31;
@@ -120,6 +120,9 @@ RC InsertStmt::create(Db *db, Inserts &inserts, Stmt *&stmt)//change the definit
             return RC::SCHEMA_FIELD_TYPE_MISMATCH;
           }
           break;
+        }
+        default: {
+          return RC::SCHEMA_FIELD_TYPE_MISMATCH;
         }
       }
 //      return RC::SCHEMA_FIELD_TYPE_MISMATCH;

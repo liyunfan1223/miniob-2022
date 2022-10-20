@@ -60,6 +60,8 @@ typedef enum {
   LESS_THAN,    //"<"     3
   GREAT_EQUAL,  //">="    4
   GREAT_THAN,   //">"     5
+  LIKE_TO,
+  NOT_LIKE_TO,
   NO_OP
 } CompOp;
 
@@ -70,7 +72,8 @@ typedef enum
   CHARS,
   INTS,
   FLOATS,
-  DATES
+  DATES,
+  TEXTS
 } AttrType;
 
 //属性值
@@ -172,6 +175,10 @@ typedef struct {
   const char *file_name;
 } LoadData;
 
+typedef struct {
+  const char *relation_name;
+} ShowIndex;
+
 union Queries {
   Selects selection;
   Inserts insertion;
@@ -183,6 +190,7 @@ union Queries {
   DropIndex drop_index;
   DescTable desc_table;
   LoadData load_data;
+  ShowIndex show_index;
   char *errors;
 };
 
@@ -206,7 +214,8 @@ enum SqlCommandFlag {
   SCF_ROLLBACK,
   SCF_LOAD_DATA,
   SCF_HELP,
-  SCF_EXIT
+  SCF_EXIT,
+  SCF_SHOW_INDEX,
 };
 // struct of flag and sql_struct
 typedef struct Query {
@@ -259,6 +268,8 @@ void create_table_init_name(CreateTable *create_table, const char *relation_name
 void create_table_destroy(CreateTable *create_table);
 
 void drop_table_init(DropTable *drop_table, const char *relation_name);
+void show_index_init(ShowIndex * show_index, const char * relation_name);
+
 void drop_table_destroy(DropTable *drop_table);
 
 void create_index_init(
@@ -267,6 +278,7 @@ void create_index_destroy(CreateIndex *create_index);
 
 void drop_index_init(DropIndex *drop_index, const char *index_name);
 void drop_index_destroy(DropIndex *drop_index);
+void show_index_destroy(ShowIndex *show_index);
 
 void desc_table_init(DescTable *desc_table, const char *relation_name);
 void desc_table_destroy(DescTable *desc_table);

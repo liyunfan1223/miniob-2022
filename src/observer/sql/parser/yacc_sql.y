@@ -119,6 +119,9 @@ ParserContext *get_context(yyscan_t scanner)
         BY
         ORDER
         ASC
+        NOT
+        LIKE
+        TEXT_T
 
 %union {
   struct _Attr *attr;
@@ -170,7 +173,14 @@ command:
 	| load_data
 	| help
 	| exit
+	| show_index
     ;
+
+show_index:
+    SHOW INDEX FROM ID SEMICOLON {
+	CONTEXT->ssql->flag=SCF_SHOW_INDEX;
+	show_index_init(&CONTEXT->ssql->sstr.show_index, $4);
+    };
 
 exit:			
     EXIT SEMICOLON {
@@ -287,7 +297,9 @@ type:
        | STRING_T { $$=CHARS; }
        | FLOAT_T { $$=FLOATS; }
        | DATE_T { $$=DATES; }
+       | TEXT_T { $$=TEXTS; }
        ;
+
 ID_get:
 	ID 
 	{
@@ -684,6 +696,8 @@ comOp:
     | LE { CONTEXT->comp = LESS_EQUAL; }
     | GE { CONTEXT->comp = GREAT_EQUAL; }
     | NE { CONTEXT->comp = NOT_EQUAL; }
+    | LIKE { CONTEXT->comp = LIKE_TO; }
+    | NOT LIKE { CONTEXT->comp = NOT_LIKE_TO; }
     ;
 
 load_data:

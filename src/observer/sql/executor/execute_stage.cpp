@@ -214,6 +214,9 @@ void ExecuteStage::handle_request(common::StageEvent *event)
       const char *response = "Unsupported\n";
       session_event->set_response(response);
     } break;
+    case SCF_SHOW_INDEX: {
+      // TODO
+    } break;
     default: {
       LOG_ERROR("Unsupported command=%d\n", sql->flag);
     }

@@ -34,8 +34,8 @@ void relation_attr_init(RelAttr *relation_attr, const char *relation_name, const
   relation_attr->aggType = AGG_NONE;
 }
 
-void relation_attr_aggr_init(RelAttr *relation_attr, const char *relation_name,
-    const char *attribute_name, AggType aggrType)
+void relation_attr_aggr_init(
+    RelAttr *relation_attr, const char *relation_name, const char *attribute_name, AggType aggrType)
 {
   if (relation_name != nullptr) {
     relation_attr->relation_name = strdup(relation_name);
@@ -65,8 +65,7 @@ void group_attr_init(GroupAttr *group_attr, const char *relation_name, const cha
   group_attr->attribute_name = strdup(attribute_name);
 }
 
-void order_attr_init(OrderAttr *order_attr, const char *relation_name, const char *attribute_name,
-    OrderType orderType)
+void order_attr_init(OrderAttr *order_attr, const char *relation_name, const char *attribute_name, OrderType orderType)
 {
   if (relation_name != nullptr) {
     order_attr->relation_name = strdup(relation_name);
@@ -90,15 +89,13 @@ void value_init_float(Value *value, float v)
   memcpy(value->data, &v, sizeof(v));
 }
 
-
-
 int value_init_date(Value *value, const char *v)
 {
   value->type = DATES;
   value->data = malloc(sizeof(int));
 
-  int y,m,d;
-  sscanf(v, "%d-%d-%d", &y, &m, &d);//not check return value eq 3, lex guarantee
+  int y, m, d;
+  sscanf(v, "%d-%d-%d", &y, &m, &d);  // not check return value eq 3, lex guarantee
   int val = y * 10000 + m * 100 + d;
   memcpy(value->data, &val, sizeof(int));
   return -1;
@@ -315,6 +312,11 @@ void drop_table_init(DropTable *drop_table, const char *relation_name)
   drop_table->relation_name = strdup(relation_name);
 }
 
+void show_index_init(ShowIndex *show_index, const char *relation_name)
+{
+  show_index->relation_name = strdup(relation_name);
+}
+
 void drop_table_destroy(DropTable *drop_table)
 {
   free(drop_table->relation_name);
@@ -349,6 +351,12 @@ void drop_index_destroy(DropIndex *drop_index)
 {
   free((char *)drop_index->index_name);
   drop_index->index_name = nullptr;
+}
+
+void show_index_destroy(ShowIndex *show_index)
+{
+  free((char *)show_index->relation_name);
+  show_index->relation_name = nullptr;
 }
 
 void desc_table_init(DescTable *desc_table, const char *relation_name)
@@ -430,6 +438,9 @@ void query_reset(Query *query)
     case SCF_DROP_INDEX: {
       drop_index_destroy(&query->sstr.drop_index);
     } break;
+    case SCF_SHOW_INDEX: {
+      show_index_destroy(&query->sstr.show_index);
+    }
     case SCF_SYNC: {
 
     } break;

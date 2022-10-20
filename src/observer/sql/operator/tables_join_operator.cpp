@@ -153,6 +153,14 @@ bool TablesJoinPredOperator::do_predicate_( std::vector<Record *> &records, int 
       case GREAT_THAN: {
         filter_result = (compare > 0);
       } break;
+      case LIKE_TO: {
+        assert(left_cell.attr_type() == right_cell.attr_type() && left_cell.attr_type() == CHARS);
+        // TODO
+      } break;
+      case NOT_LIKE_TO: {
+        assert(left_cell.attr_type() == right_cell.attr_type() && left_cell.attr_type() == CHARS);
+        // TODO
+      }
       default: {
         LOG_WARN("invalid compare type: %d", comp);
       } break;

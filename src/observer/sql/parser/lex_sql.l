@@ -83,6 +83,9 @@ QUOTE            [\'\"]
 [Oo][Rr][Dd][Ee][Rr]                                 RETURN_TOKEN(ORDER);
 [Aa][Ss][Cc]                                         RETURN_TOKEN(ASC);
 [Dd][Aa][Tt][Ee]                                     RETURN_TOKEN(DATE_T);
+[Nn][Oo][Tt]                                         RETURN_TOKEN(NOT);
+[Ll][Ii][Kk][Ee]                                     RETURN_TOKEN(LIKE);
+[Tt][Ee][Xx][Tt]                                     RETURN_TOKEN(TEXT_T);
 
 {ID}                                                 yylval->string=strdup(yytext); RETURN_TOKEN(ID);
 "("                                                  RETURN_TOKEN(LBRACE);
@@ -92,12 +95,13 @@ QUOTE            [\'\"]
 "="                                                  RETURN_TOKEN(EQ);
 "<="                                                 RETURN_TOKEN(LE);
 "<>"                                                 RETURN_TOKEN(NE);
+"!="                                                 RETURN_TOKEN(NE);
 "<"                                                  RETURN_TOKEN(LT);
 ">="                                                 RETURN_TOKEN(GE);
 ">"                                                  RETURN_TOKEN(GT);
 
 {QUOTE}[0-9]{4}\-(0?[1-9]|1[012])\-(0?[1-9]|[12][0-9]|3[01]){QUOTE} yylval->string=strdup(yytext); RETURN_TOKEN(DATE_STR);
-{QUOTE}[\40\42\47A-Za-z0-9_/\.\-]*{QUOTE}            yylval->string=strdup(yytext); RETURN_TOKEN(SSS);
+{QUOTE}[\40\42\47A-Za-z0-9_/\.\-\%]*{QUOTE}            yylval->string=strdup(yytext); RETURN_TOKEN(SSS);
 
 .                                                    printf("Unknown character [%c]\n",yytext[0]); return yytext[0];
 %%
