@@ -64,12 +64,26 @@ int TupleCell::compare(const TupleCell &other) const
       LOG_WARN("unsupported type: %d", this->attr_type_);
     }
     }
-  } else if (this->attr_type_ == INTS && other.attr_type_ == FLOATS) {
+  } else if (this->attr_type_ == INTS && other.attr_type_ == FLOATS) { //this是表格定义的
     float this_data = *(int *)data_;
     return compare_float(&this_data, other.data_);
   } else if (this->attr_type_ == FLOATS && other.attr_type_ == INTS) {
     float other_data = *(int *)other.data_;
     return compare_float(data_, &other_data);
+  }else if (this->attr_type_ == INTS && other.attr_type_ == CHARS) { //this是表格定义的
+    float this_data = (float) *(int *)data_;
+    float other_data = atof((char *)other.data_);
+    return compare_float(&this_data, &other_data);
+  } else if (this->attr_type_ == FLOATS && other.attr_type_ == CHARS) {
+    float other_data = atof((char *)other.data_);
+    return compare_float(data_, &other_data);
+  }else if (this->attr_type_ == CHARS && other.attr_type_ == INTS) {//more cases
+    float this_data = atof((char *)data_);
+    float other_data = (float) *(int *)other.data_;
+    return compare_float(&this_data, &other_data);
+  } else if (this->attr_type_ == CHARS && other.attr_type_ == FLOATS) {
+    float this_data = atof((char *)data_);
+    return compare_float(&this_data, other.data_);
   }
   LOG_WARN("not supported");
   return -1; // TODO return rc?

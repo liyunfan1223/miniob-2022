@@ -16,6 +16,7 @@ See the Mulan PSL v2 for more details. */
 #include "common/log/log.h"
 #include "storage/common/db.h"
 #include "storage/common/table.h"
+#include <cmath>
 
 InsertStmt::InsertStmt(Table *table, const Value *values, int value_amount)
   : table_ (table), values_(values), value_amount_(value_amount)
@@ -41,7 +42,7 @@ bool InsertStmt::check_date(int val)
   return 1;
 }
 
-RC InsertStmt::create(Db *db, const Inserts &inserts, Stmt *&stmt)
+RC InsertStmt::create(Db *db, Inserts &inserts, Stmt *&stmt)//change the definition of Inserts into non-const
 {
   const char *table_name = inserts.relation_name;
   if (nullptr == db || nullptr == table_name || inserts.records[0].value_num <= 0) {
@@ -58,8 +59,8 @@ RC InsertStmt::create(Db *db, const Inserts &inserts, Stmt *&stmt)
   }
 
   // check the fields number
-  const Value *values = inserts.records[0].values;
-  const int value_num = inserts.records[0].value_num;
+  Value *values = inserts.records[0].values; //change the const type into non-const and change the value
+  int value_num = inserts.records[0].value_num;
   const TableMeta &table_meta = table->table_meta();
   const int field_num = table_meta.field_num() - table_meta.sys_field_num();
   if (field_num != value_num) {
@@ -76,7 +77,52 @@ RC InsertStmt::create(Db *db, const Inserts &inserts, Stmt *&stmt)
     if (field_type != value_type) { // TODO try to convert the value type to field type
       LOG_WARN("field type mismatch. table=%s, field=%s, field type=%d, value_type=%d", 
                table_name, field_meta->name(), field_type, value_type);
-      return RC::SCHEMA_FIELD_TYPE_MISMATCH;
+      //here do the typecast
+      switch(field_type){
+        case INTS: {
+          int old_value_type=values[i].type;
+          values[i].type = INTS;
+          if (old_value_type == FLOATS){
+            int temp = (int)(*(float *)values[i].data + 0.5);
+            *(int *)values[i].data = temp;
+          } else if (value_type == CHARS) {  //字符串前缀是数字，或者字符串无数字为输出0的情况，atoi都可以实现。
+            int temp = atoi((char *)values[i].data);
+            *(int *)values[i].data = temp;
+          } else {
+            return RC::SCHEMA_FIELD_TYPE_MISMATCH;
+          }
+          break;
+        }
+        case FLOATS:{
+          int old_value_type=values[i].type;
+          values[i].type = FLOATS;
+          if (old_value_type == INTS) {
+            float temp = (float) *(int *)values[i].data;
+            *(float *)values[i].data = temp;
+          } else if (value_type == CHARS) {  //字符串前缀是数字，或者字符串无数字为输出0的情况，atoi都可以实现。
+            float temp = atof((char *)values[i].data);
+            *(float *)values[i].data = temp;
+          } else {
+            return RC::SCHEMA_FIELD_TYPE_MISMATCH;
+          }
+          break;
+        }
+        case CHARS:{//不带符号
+          int old_value_type=values[i].type;
+          values[i].type = CHARS;
+          if (old_value_type == INTS) {
+//            itoa(*(int *)values[i].data, (char *)values[i].data, 10);
+            sprintf((char *)values[i].data,"%d",abs(*(int *)values[i].data));
+          } else if (value_type == FLOATS) {
+            sprintf((char *)values[i].data,"%g",fabs(*(float *)values[i].data));//%f会多小数位
+//            ftoa(*(float *)values[i].data, (char *)values[i].data, 10);
+          } else {
+            return RC::SCHEMA_FIELD_TYPE_MISMATCH;
+          }
+          break;
+        }
+      }
+//      return RC::SCHEMA_FIELD_TYPE_MISMATCH;
     } else if (value_type == DATES) {
       int val = *(int *)values[i].data;
       if (!check_date(val)) {
