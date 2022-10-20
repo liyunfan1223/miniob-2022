@@ -49,6 +49,7 @@ public:
   Tuple * current_tuple() override;
 private:
   RC cartesian_product_dfs_(int table_index);
+  bool is_match(const char * str, const char * pattern, size_t pattern_length);
   bool do_predicate_( std::vector<Record *> &records , int record_length);
   int32_t get_field_index_(FieldExpr * fieldExpr);
   std::vector<TableScanOperator*> scan_opers_;

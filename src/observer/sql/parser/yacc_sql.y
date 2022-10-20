@@ -24,6 +24,7 @@ typedef struct ParserContext {
   char id[MAX_NUM];
   OrderType order_type;
   AggType agg_type;
+  size_t attr_length;
 } ParserContext;
 
 //获取子串
@@ -280,7 +281,7 @@ attr_def:
     |ID_get type
 		{
 			AttrInfo attribute;
-			attr_info_init(&attribute, CONTEXT->id, $2, 4);
+			attr_info_init(&attribute, CONTEXT->id, $2, CONTEXT->attr_length);
 			create_table_append_attribute(&CONTEXT->ssql->sstr.create_table, &attribute);
 			// CONTEXT->ssql->sstr.create_table.attributes[CONTEXT->value_length].name=(char*)malloc(sizeof(char));
 			// strcpy(CONTEXT->ssql->sstr.create_table.attributes[CONTEXT->value_length].name, CONTEXT->id); 
@@ -293,11 +294,11 @@ number:
 		NUMBER {$$ = $1;}
 		;
 type:
-	INT_T { $$=INTS; }
-       | STRING_T { $$=CHARS; }
-       | FLOAT_T { $$=FLOATS; }
-       | DATE_T { $$=DATES; }
-       | TEXT_T { $$=TEXTS; }
+	INT_T { $$=INTS; CONTEXT->attr_length = 4; }
+       | STRING_T { $$=CHARS; CONTEXT->attr_length = 40; }
+       | FLOAT_T { $$=FLOATS; CONTEXT->attr_length = 4; }
+       | DATE_T { $$=DATES; CONTEXT->attr_length = 4; }
+       | TEXT_T { $$=TEXTS; CONTEXT->attr_length = 4; }
        ;
 
 ID_get:

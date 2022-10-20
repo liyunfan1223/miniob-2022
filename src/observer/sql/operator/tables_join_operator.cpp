@@ -108,6 +108,38 @@ int32_t TablesJoinPredOperator::get_field_index_(FieldExpr * fieldExpr)
   return INT32_MAX;
 }
 
+bool TablesJoinPredOperator::is_match(const char * str, const char * pattern, size_t pattern_length)
+{
+  size_t str_length = strlen(str);
+  bool match_dp[str_length + 1][pattern_length + 1];
+  memset(match_dp, 0, sizeof(match_dp));
+  match_dp[0][0] = 1;
+  for (size_t i = 0; i <= str_length; i++) {
+    for (size_t j = 1; j <= pattern_length; j++) {
+      switch (pattern[j - 1]) {
+        case '%': {
+          for (size_t k = 0; k <= i; k++) {
+            if (match_dp[k][j - 1] == 1) {
+              match_dp[i][j] = 1;
+            }
+          }
+        } break;
+        case '_': {
+          if (i >= 1) {
+            match_dp[i][j] = match_dp[i - 1][j - 1];
+          }
+        } break;
+        default: {
+          if (i >= 1 && pattern[j - 1] == str[i - 1]) {
+            match_dp[i][j] = match_dp[i - 1][j - 1];
+          }
+        }
+      }
+    }
+  }
+  return match_dp[str_length][pattern_length];
+}
+
 bool TablesJoinPredOperator::do_predicate_( std::vector<Record *> &records, int record_length)
 {
   if (filter_stmt_ == nullptr || filter_stmt_->filter_units().empty()) {
@@ -155,11 +187,11 @@ bool TablesJoinPredOperator::do_predicate_( std::vector<Record *> &records, int 
       } break;
       case LIKE_TO: {
         assert(left_cell.attr_type() == right_cell.attr_type() && left_cell.attr_type() == CHARS);
-        // TODO
+        filter_result = is_match(left_cell.data(), right_cell.data(), right_cell.length());
       } break;
       case NOT_LIKE_TO: {
         assert(left_cell.attr_type() == right_cell.attr_type() && left_cell.attr_type() == CHARS);
-        // TODO
+        filter_result = !is_match(left_cell.data(), right_cell.data(), right_cell.length());
       }
       default: {
         LOG_WARN("invalid compare type: %d", comp);
