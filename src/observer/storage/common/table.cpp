@@ -434,20 +434,31 @@ RC Table::make_record(int value_num, const Value *values, char *&record_out)
   // 复制所有字段的值
   int record_size = table_meta_.record_size();
   char *record = new char[record_size];
+  int nullable_record = 0;
 
+  assert(value_num < 32);
   for (int i = 0; i < value_num; i++) {
     const FieldMeta *field = table_meta_.field(i + normal_field_start_index);
     const Value &value = values[i];
-    size_t copy_len = field->len();
-    if (field->type() == CHARS) {
-      const size_t data_len = strlen((const char *)value.data);
-      if (copy_len > data_len) {
-        copy_len = data_len + 1;
-      }
+    if (value.is_null && !field->nullable()) {
+      return RC::GENERIC_ERROR;
     }
-    memcpy(record + field->offset(), value.data, copy_len);
+    if (value.is_null && field->nullable()) {
+      nullable_record |= (1u << i);
+    } else {
+      size_t copy_len = field->len();
+      if (field->type() == CHARS) {
+        const size_t data_len = strlen((const char *)value.data);
+        if (copy_len > data_len) {
+          copy_len = data_len + 1;
+        }
+      }
+      memcpy(record + field->offset(), value.data, copy_len);
+    }
   }
-
+  // 设置 nullable 字段
+  memcpy(record + table_meta_.field(TableMeta::null_field_start_index)->offset(),
+      &nullable_record, sizeof(int32_t));
   record_out = record;
   return RC::SUCCESS;
 }

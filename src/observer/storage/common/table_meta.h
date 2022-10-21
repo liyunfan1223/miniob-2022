@@ -37,6 +37,7 @@ public:
   RC add_index(const IndexMeta &index);
 
 public:
+  static const int32_t null_field_start_index = 1;
   const char *name() const;
   const FieldMeta *trx_field() const;
   const FieldMeta *field(int index) const;

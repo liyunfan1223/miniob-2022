@@ -40,17 +40,29 @@ void TableMeta::swap(TableMeta &other) noexcept
 
 RC TableMeta::init_sys_fields()
 {
-  sys_fields_.reserve(1);
+  sys_fields_.reserve(2);
   FieldMeta field_meta;
-  RC rc = field_meta.init(Trx::trx_field_name(), Trx::trx_field_type(), 0, Trx::trx_field_len(), false);
+  int offset = 0;
+  RC rc = field_meta.init(Trx::trx_field_name(), Trx::trx_field_type(), 0, Trx::trx_field_len(), false, false);
   if (rc != RC::SUCCESS) {
     LOG_ERROR("Failed to init trx field. rc = %d:%s", rc, strrc(rc));
     return rc;
   }
 
   sys_fields_.push_back(field_meta);
+  offset += Trx::trx_field_len();
+
+  rc = field_meta.init("__null", INTS, offset, sizeof(int32_t), false, false);
+  if (rc != RC::SUCCESS) {
+    LOG_ERROR("Failed to init trx field. rc = %d:%s", rc, strrc(rc));
+    return rc;
+  }
+
+  sys_fields_.push_back(field_meta);
+  offset += sizeof(int32_t);
   return rc;
 }
+
 RC TableMeta::init(const char *name, int field_num, const AttrInfo attributes[])
 {
   if (common::is_blank(name)) {
@@ -82,7 +94,8 @@ RC TableMeta::init(const char *name, int field_num, const AttrInfo attributes[])
 
   for (int i = 0; i < field_num; i++) {
     const AttrInfo &attr_info = attributes[i];
-    rc = fields_[i + sys_fields_.size()].init(attr_info.name, attr_info.type, field_offset, attr_info.length, true);
+    rc = fields_[i + sys_fields_.size()].init(attr_info.name, attr_info.type,
+        field_offset, attr_info.length, true, attr_info.nullable);
     if (rc != RC::SUCCESS) {
       LOG_ERROR("Failed to init field meta. table name=%s, field name: %s", name, attr_info.name);
       return rc;

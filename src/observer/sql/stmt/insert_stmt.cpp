@@ -88,6 +88,8 @@ RC InsertStmt::create(Db *db, Inserts &inserts, Stmt *&stmt)//change the definit
           } else if (value_type == CHARS) {  //字符串前缀是数字，或者字符串无数字为输出0的情况，atoi都可以实现。
             int temp = atoi((char *)values[i].data);
             *(int *)values[i].data = temp;
+          } else if (value_type == NULL_T) {
+            values[i].is_null = 1;
           } else {
             return RC::SCHEMA_FIELD_TYPE_MISMATCH;
           }
@@ -102,6 +104,8 @@ RC InsertStmt::create(Db *db, Inserts &inserts, Stmt *&stmt)//change the definit
           } else if (value_type == CHARS) {  //字符串前缀是数字，或者字符串无数字为输出0的情况，atoi都可以实现。
             float temp = atof((char *)values[i].data);
             *(float *)values[i].data = temp;
+          } else if (value_type == NULL_T) {
+            values[i].is_null = 1;
           } else {
             return RC::SCHEMA_FIELD_TYPE_MISMATCH;
           }
@@ -116,11 +120,23 @@ RC InsertStmt::create(Db *db, Inserts &inserts, Stmt *&stmt)//change the definit
           } else if (value_type == FLOATS) {
             sprintf((char *)values[i].data,"%g",fabs(*(float *)values[i].data));//%f会多小数位
 //            ftoa(*(float *)values[i].data, (char *)values[i].data, 10);
+          } else if (value_type == NULL_T) {
+            values[i].is_null = 1;
           } else {
             return RC::SCHEMA_FIELD_TYPE_MISMATCH;
           }
           break;
         }
+        case DATES: {
+          int old_value_type=values[i].type;
+          values[i].type = DATES;
+          if (old_value_type == CHARS) {
+            return RC::GENERIC_ERROR;
+          }
+          if (old_value_type == NULL_T) {
+            values[i].is_null = 1;
+          }
+        } break;
         default: {
           return RC::SCHEMA_FIELD_TYPE_MISMATCH;
         }

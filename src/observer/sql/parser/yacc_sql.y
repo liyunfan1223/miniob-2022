@@ -123,6 +123,8 @@ ParserContext *get_context(yyscan_t scanner)
         NOT
         LIKE
         TEXT_T
+        NULL_TOKEN
+        NULLABLE
 
 %union {
   struct _Attr *attr;
@@ -268,27 +270,38 @@ attr_def_list:
     
 attr_def:
     ID_get type LBRACE number RBRACE 
-		{
-			AttrInfo attribute;
-			attr_info_init(&attribute, CONTEXT->id, $2, $4);
-			create_table_append_attribute(&CONTEXT->ssql->sstr.create_table, &attribute);
-			// CONTEXT->ssql->sstr.create_table.attributes[CONTEXT->value_length].name =(char*)malloc(sizeof(char));
-			// strcpy(CONTEXT->ssql->sstr.create_table.attributes[CONTEXT->value_length].name, CONTEXT->id); 
-			// CONTEXT->ssql->sstr.create_table.attributes[CONTEXT->value_length].type = $2;  
-			// CONTEXT->ssql->sstr.create_table.attributes[CONTEXT->value_length].length = $4;
-			CONTEXT->value_length++;
-		}
+	{
+		AttrInfo attribute;
+		attr_info_init(&attribute, CONTEXT->id, $2, $4);
+		create_table_append_attribute(&CONTEXT->ssql->sstr.create_table, &attribute);
+		// CONTEXT->ssql->sstr.create_table.attributes[CONTEXT->value_length].name =(char*)malloc(sizeof(char));
+		// strcpy(CONTEXT->ssql->sstr.create_table.attributes[CONTEXT->value_length].name, CONTEXT->id);
+		// CONTEXT->ssql->sstr.create_table.attributes[CONTEXT->value_length].type = $2;
+		// CONTEXT->ssql->sstr.create_table.attributes[CONTEXT->value_length].length = $4;
+		CONTEXT->value_length++;
+	}
     |ID_get type
-		{
-			AttrInfo attribute;
-			attr_info_init(&attribute, CONTEXT->id, $2, CONTEXT->attr_length);
-			create_table_append_attribute(&CONTEXT->ssql->sstr.create_table, &attribute);
-			// CONTEXT->ssql->sstr.create_table.attributes[CONTEXT->value_length].name=(char*)malloc(sizeof(char));
-			// strcpy(CONTEXT->ssql->sstr.create_table.attributes[CONTEXT->value_length].name, CONTEXT->id); 
-			// CONTEXT->ssql->sstr.create_table.attributes[CONTEXT->value_length].type=$2;  
-			// CONTEXT->ssql->sstr.create_table.attributes[CONTEXT->value_length].length=4; // default attribute length
-			CONTEXT->value_length++;
-		}
+	{
+		AttrInfo attribute;
+		attr_info_init(&attribute, CONTEXT->id, $2, CONTEXT->attr_length);
+		create_table_append_attribute(&CONTEXT->ssql->sstr.create_table, &attribute);
+		// CONTEXT->ssql->sstr.create_table.attributes[CONTEXT->value_length].name=(char*)malloc(sizeof(char));
+		// strcpy(CONTEXT->ssql->sstr.create_table.attributes[CONTEXT->value_length].name, CONTEXT->id);
+		// CONTEXT->ssql->sstr.create_table.attributes[CONTEXT->value_length].type=$2;
+		// CONTEXT->ssql->sstr.create_table.attributes[CONTEXT->value_length].length=4; // default attribute length
+		CONTEXT->value_length++;
+	}
+    |ID_get type NULLABLE
+	{
+		AttrInfo attribute;
+		nullable_attr_info_init(&attribute, CONTEXT->id, $2, CONTEXT->attr_length);
+		create_table_append_attribute(&CONTEXT->ssql->sstr.create_table, &attribute);
+		// CONTEXT->ssql->sstr.create_table.attributes[CONTEXT->value_length].name=(char*)malloc(sizeof(char));
+		// strcpy(CONTEXT->ssql->sstr.create_table.attributes[CONTEXT->value_length].name, CONTEXT->id);
+		// CONTEXT->ssql->sstr.create_table.attributes[CONTEXT->value_length].type=$2;
+		// CONTEXT->ssql->sstr.create_table.attributes[CONTEXT->value_length].length=4; // default attribute length
+		CONTEXT->value_length++;
+	}
     ;
 number:
 		NUMBER {$$ = $1;}
@@ -351,6 +364,9 @@ value:
     |SSS {
 		$1 = substr($1,1,strlen($1)-2);
   		value_init_string(&CONTEXT->values[CONTEXT->value_length++], $1);
+    }
+    |NULL_TOKEN {
+    		value_init_null(&CONTEXT->values[CONTEXT->value_length++]);
     }
     ;
     

@@ -128,6 +128,7 @@ public:
     const TupleCellSpec *spec = speces_[index];
     FieldExpr *field_expr = (FieldExpr *)spec->expression();
     const FieldMeta *field_meta = field_expr->field().meta();
+//    bool is_null = this->record_->data() +
     cell.set_type(field_meta->type());
     cell.set_data(this->record_->data() + field_meta->offset());
     cell.set_length(field_meta->len());
@@ -230,9 +231,20 @@ public:
     const TupleCellSpec *spec = speces_[index];
     FieldExpr *field_expr = (FieldExpr *)spec->expression();
     const FieldMeta *field_meta = field_expr->field().meta();
+    auto record_now = records_.at(record_index(index));
+    auto idx_in_rec = index_in_record(index);
     cell.set_type(field_meta->type());
-    cell.set_data(records_.at(record_index(index))->data() + field_meta->offset());
+    cell.set_data(record_now->data() + field_meta->offset());
     cell.set_length(field_meta->len());
+
+    if (field_meta->nullable()) {
+      int32_t null_mask = 0;
+      null_mask = *(int *)(record_now->data() + 4);
+      if (null_mask & (1 << (idx_in_rec - 2))) {
+        cell.set_type(NULL_T);
+      }
+    }
+
     return RC::SUCCESS;
   }
 
@@ -289,6 +301,15 @@ public:
       }
     }
     return (int32_t)sum_.size() - 1;
+  }
+
+  int32_t index_in_record(int32_t index) const {
+    for (int ri = 0; ri < (int32_t)sum_.size() - 1; ri++) {
+      if (sum_[ri + 1] > index) {
+        return index - sum_[ri];
+      }
+    }
+    return index - sum_[(int32_t)sum_.size() - 1];
   }
 
   void add_sum(int32_t current_sum)

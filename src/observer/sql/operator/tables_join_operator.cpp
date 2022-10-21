@@ -192,7 +192,7 @@ bool TablesJoinPredOperator::do_predicate_( std::vector<Record *> &records, int 
       case NOT_LIKE_TO: {
         assert(left_cell.attr_type() == right_cell.attr_type() && left_cell.attr_type() == CHARS);
         filter_result = !is_match(left_cell.data(), right_cell.data(), right_cell.length());
-      }
+      } break;
       default: {
         LOG_WARN("invalid compare type: %d", comp);
       } break;

@@ -106,6 +106,14 @@ void value_init_string(Value *value, const char *v)
   value->type = CHARS;
   value->data = strdup(v);
 }
+
+void value_init_null(Value *value)
+{
+  value->type = NULL_T;
+  value->is_null = 1;
+  value->data = (void *)malloc(sizeof(int32_t));
+}
+
 void value_destroy(Value *value)
 {
   value->type = UNDEFINED;
@@ -150,7 +158,17 @@ void attr_info_init(AttrInfo *attr_info, const char *name, AttrType type, size_t
   attr_info->name = strdup(name);
   attr_info->type = type;
   attr_info->length = length;
+  attr_info->nullable = 0;
 }
+
+void nullable_attr_info_init(AttrInfo *attr_info, const char *name, AttrType type, size_t length)
+{
+  attr_info->name = strdup(name);
+  attr_info->type = type;
+  attr_info->length = length;
+  attr_info->nullable = 1;
+}
+
 void attr_info_destroy(AttrInfo *attr_info)
 {
   free(attr_info->name);

@@ -46,6 +46,9 @@ void TupleCell::to_string(std::ostream &os) const
     sprintf(output, "%04d-%02d-%02d", y, m, d);
     os << output;
   } break;
+  case NULL_T: {
+    os << "NULL";
+  } break;
   default: {
     LOG_WARN("unsupported attr type: %d", attr_type_);
   } break;
@@ -60,6 +63,7 @@ int TupleCell::compare(const TupleCell &other) const
     case FLOATS: return compare_float(this->data_, other.data_);
     case CHARS: return compare_string(this->data_, this->length_, other.data_, other.length_);
     case DATES: return compare_int(this->data_, other.data_);
+    case NULL_T: return 0;
     default: {
       LOG_WARN("unsupported type: %d", this->attr_type_);
     }
@@ -77,13 +81,17 @@ int TupleCell::compare(const TupleCell &other) const
   } else if (this->attr_type_ == FLOATS && other.attr_type_ == CHARS) {
     float other_data = atof((char *)other.data_);
     return compare_float(data_, &other_data);
-  }else if (this->attr_type_ == CHARS && other.attr_type_ == INTS) {//more cases
+  } else if (this->attr_type_ == CHARS && other.attr_type_ == INTS) {//more cases
     float this_data = atof((char *)data_);
     float other_data = (float) *(int *)other.data_;
     return compare_float(&this_data, &other_data);
   } else if (this->attr_type_ == CHARS && other.attr_type_ == FLOATS) {
     float this_data = atof((char *)data_);
     return compare_float(&this_data, other.data_);
+  } else if (this->attr_type_ != NULL_T && other.attr_type_ == NULL_T) {
+    return 1;
+  } else if (this->attr_type_ == NULL_T && other.attr_type_ != NULL_T) {
+    return -1;
   }
   LOG_WARN("not supported");
   return -1; // TODO return rc?

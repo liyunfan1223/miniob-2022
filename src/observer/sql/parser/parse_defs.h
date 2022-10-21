@@ -73,13 +73,15 @@ typedef enum
   INTS,
   FLOATS,
   DATES,
-  TEXTS
+  TEXTS,
+  NULL_T,
 } AttrType;
 
 //属性值
 typedef struct _Value {
   AttrType type;  // type of value
   void *data;     // value
+  size_t is_null;
 } Value;
 
 typedef struct _Condition {
@@ -140,6 +142,7 @@ typedef struct {
   char *name;     // Attribute name
   AttrType type;  // Type of attribute
   size_t length;  // Length of attribute
+  size_t nullable;
 } AttrInfo;
 
 // struct of craete_table
@@ -241,6 +244,7 @@ void condition_init(Condition *condition, CompOp comp, int left_is_attr, RelAttr
 void condition_destroy(Condition *condition);
 
 void attr_info_init(AttrInfo *attr_info, const char *name, AttrType type, size_t length);
+void nullable_attr_info_init(AttrInfo *attr_info, const char *name, AttrType type, size_t length);
 void attr_info_destroy(AttrInfo *attr_info);
 
 void selects_init(Selects *selects, ...);
