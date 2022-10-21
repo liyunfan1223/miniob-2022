@@ -53,17 +53,20 @@ RC GroupOperator::next()
   if (current_tuple_count_ >= (int32_t) all_tuples_.size()) {
     return RC::RECORD_EOF;
   }
-  std::vector<Tuple *> tmp_tuples_;
-  tmp_tuples_.push_back(all_tuples_[current_tuple_count_++]);
+  std::vector<Tuple *> tmp_tuples;
+  tmp_tuples.push_back(all_tuples_[current_tuple_count_++]);
   while (current_tuple_count_ < (int32_t) all_tuples_.size() &&
       in_group(all_tuples_[current_tuple_count_ - 1], all_tuples_[current_tuple_count_])) {
-    tmp_tuples_.push_back(all_tuples_[current_tuple_count_++]);
+    tmp_tuples.push_back(all_tuples_[current_tuple_count_++]);
   }
   tuple_.tuple_cells_.clear();
   for (int i = 0; i < (int32_t)tuple_.speces_.size(); i++) {
-    tuple_.set_tuple_cells(i, tmp_tuples_);
+    tuple_.set_tuple_cells(i, tmp_tuples);
   }
 
+  if (!do_having_predicate_(tmp_tuples)) {
+    return next();
+  }
   return RC::SUCCESS;
 }
 
@@ -75,4 +78,43 @@ RC GroupOperator::close()
 Tuple *GroupOperator::current_tuple()
 {
   return &tuple_;
+}
+
+bool GroupOperator::do_having_predicate_(std::vector<Tuple *> & tmp_tuples)
+{
+  for (size_t i = 0; i < having_num_; i++) {
+    TupleCell tc_left, tc_right;
+    auto & cond = having_conditions_[i];
+    if (cond.left_is_attr) {
+//      GroupTuple tmp_group_tuple;
+//      tmp_group_tuple.speces_ = tuple_.speces_;
+//      int32_t idx = tuple_.
+      if (strcmp(cond.left_attr.attribute_name, "*") == 0) {
+        GroupTuple::get_count(true, 0, tmp_tuples, UNDEFINED, tc_left);
+      } else {
+        tuple_.find_cell(cond.left_attr.relation_name, cond.left_attr.attribute_name, tc_left);
+      }
+    } else {
+      tc_left.set_type(cond.left_value.type);
+      tc_left.set_data((char *)cond.left_value.data);
+      if (cond.left_value.type == CHARS) {
+        tc_left.set_length(strlen(tc_left.data()));
+      }
+    }
+
+    if (cond.right_is_attr) {
+      tuple_.find_cell(cond.right_attr.relation_name, cond.right_attr.attribute_name, tc_right);
+    } else {
+      tc_right.set_type(cond.right_value.type);
+      tc_right.set_data((char *)cond.right_value.data);
+      if (cond.right_value.type == CHARS) {
+        tc_right.set_length(strlen(tc_right.data()));
+      }
+    }
+
+    if (!tc_left.condition_satisfy(cond.comp, tc_right)) {
+      return false;
+    }
+  }
+  return true;
 }

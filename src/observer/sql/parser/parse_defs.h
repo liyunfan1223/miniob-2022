@@ -108,6 +108,8 @@ typedef struct {
   GroupAttr group_attributes[MAX_NUM];    // attrs in Select clause
   size_t order_num;
   OrderAttr order_attributes[MAX_NUM];
+  size_t having_num;
+  Condition having_conditions[MAX_NUM];
 } Selects;
 
 typedef struct {
@@ -251,6 +253,8 @@ void selects_init(Selects *selects, ...);
 void selects_append_attribute(Selects *selects, RelAttr *rel_attr);
 void selects_append_relation(Selects *selects, const char *relation_name);
 void selects_append_conditions(Selects *selects, Condition conditions[], size_t condition_num);
+void selects_append_having_conditions(Selects *selects, Condition conditions[], size_t condition_num);
+void selects_append_having_condition(Selects *selects, Condition * condition);
 void selects_destroy(Selects *selects);
 
 void group_append_attribute(Selects *selects, GroupAttr *group_attr);

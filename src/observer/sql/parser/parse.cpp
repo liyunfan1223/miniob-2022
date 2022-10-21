@@ -202,6 +202,20 @@ void selects_append_conditions(Selects *selects, Condition conditions[], size_t 
   selects->condition_num = condition_num;
 }
 
+void selects_append_having_conditions(Selects *selects, Condition conditions[], size_t condition_num)
+{
+  assert(condition_num <= sizeof(selects->conditions) / sizeof(selects->conditions[0]));
+  for (size_t i = 0; i < condition_num; i++) {
+    selects->having_conditions[i] = conditions[i];
+  }
+  selects->having_num = condition_num;
+}
+
+void selects_append_having_condition(Selects *selects, Condition * condition)
+{
+  selects->having_conditions[selects->having_num++] = *condition;
+}
+
 void selects_destroy(Selects *selects)
 {
   for (size_t i = 0; i < selects->attr_num; i++) {

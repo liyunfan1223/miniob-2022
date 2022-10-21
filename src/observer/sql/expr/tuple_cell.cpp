@@ -96,3 +96,33 @@ int TupleCell::compare(const TupleCell &other) const
   LOG_WARN("not supported");
   return -1; // TODO return rc?
 }
+
+int TupleCell::condition_satisfy(CompOp comp, const TupleCell & other) const
+{
+  const int compare = this->compare(other);
+  int filter_result = 0;
+  switch (comp) {
+    case EQUAL_TO: {
+      filter_result = (0 == compare);
+    } break;
+    case LESS_EQUAL: {
+      filter_result = (compare <= 0);
+    } break;
+    case NOT_EQUAL: {
+      filter_result = (compare != 0);
+    } break;
+    case LESS_THAN: {
+      filter_result = (compare < 0);
+    } break;
+    case GREAT_EQUAL: {
+      filter_result = (compare >= 0);
+    } break;
+    case GREAT_THAN: {
+      filter_result = (compare > 0);
+    } break;
+    default: {
+      assert(false); // unimplemented
+    }
+  }
+  return filter_result;
+}

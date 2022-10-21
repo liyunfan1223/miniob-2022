@@ -563,7 +563,8 @@ RC ExecuteStage::do_select(SQLStageEvent *sql_event)
     }
   }
 
-  GroupOperator groupOperator(selects.group_num, selects.group_attributes);
+  GroupOperator groupOperator(selects.group_num, selects.group_attributes,
+      selects.having_num, selects.having_conditions);
   groupOperator.add_child(&project_oper);
   if (has_agg) {
     rc = check_attr_in_group(selects.attr_num, selects.attributes, selects.group_num, selects.group_attributes);
@@ -697,7 +698,7 @@ RC ExecuteStage::do_insert(SQLStageEvent *sql_event)
   Record recordlist[inserts.record_num];
   int rollback_idx=0;
 
-  for (int i = 0; i < inserts.record_num; i++) {
+  for (int i = 0; i < (int)inserts.record_num; i++) {
     rc= table->insert_record(trx, inserts.records[i].value_num, inserts.records[i].values, record);
 //    记录所有成功的operation的地址。operations_是trx的private变量。调用table->rollback_insert()。在rollback之后要delete_operatoin。
 //    考虑并发情况会更加复杂

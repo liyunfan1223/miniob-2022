@@ -23,7 +23,7 @@ RC UpdateOperator::open()
     return rc;
   }
 
-  Table *table = update_stmt_->table();
+//  Table *table = update_stmt_->table();
   while (RC::SUCCESS == (rc = child->next())) {
 
     Tuple *tuple = child->current_tuple();
@@ -32,8 +32,8 @@ RC UpdateOperator::open()
       return rc;
     }
 
-    RowTuple *row_tuple = static_cast<RowTuple *>(tuple);
-    Record &record = row_tuple->record();
+//    RowTuple *row_tuple = static_cast<RowTuple *>(tuple);
+//    Record &record = row_tuple->record();
     if (rc != RC::SUCCESS) {
       LOG_WARN("failed to delete record: %s", strrc(rc));
       return rc;

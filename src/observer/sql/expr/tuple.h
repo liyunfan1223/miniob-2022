@@ -414,9 +414,12 @@ public:
   RC find_cell(const char *table_name, const char *field_name, TupleCell &cell) const override
   {
     for (size_t i = 0; i < speces_.size(); ++i) {
-      const FieldExpr * field_expr = (const FieldExpr *)speces_[i]->expression();
-      const Field &exprField = field_expr->field();
-      if ((0 == strcmp(table_name, exprField.table_name())) and (0 == strcmp(field_name, exprField.field_name()))) {
+//      const FieldExpr * field_expr = (const FieldExpr *)speces_[i]->expression();
+//      auto spece_table_name = speces_[i]-
+//      const Field &exprField = field_expr->field();
+      if ( ( table_name == nullptr ||
+             ( table_name != nullptr && speces_[i]->table_alias() != nullptr && 0 == strcmp(table_name, speces_[i]->table_alias()) )
+           ) && (0 == strcmp(field_name, speces_[i]->alias())) ) {
         return cell_at(i, cell);
       }
     }
@@ -427,23 +430,37 @@ public:
     spec = speces_[index];
     return SUCCESS;
   }
-  RC get_count(int idx, std::vector<Tuple *> tmp_tuples, AttrType attrType, TupleCell & tuple_cell)
+  static RC get_count(bool is_star, int idx, std::vector<Tuple *> tmp_tuples, AttrType attrType, TupleCell & tuple_cell)
   {
     tuple_cell.set_type(INTS);
-    tuple_cell.set_data((char *)(new int32_t(tmp_tuples.size())));
     tuple_cell.set_length(sizeof(int32_t));
+    if (is_star) {
+      tuple_cell.set_data((char *)(new int32_t(tmp_tuples.size())));
+    } else {
+      int32_t count = 0;
+      for (auto tuple : tmp_tuples) {
+        TupleCell tmp_cell;
+        tuple->cell_at(idx, tmp_cell);
+        if (tmp_cell.attr_type() == NULL_T) continue;
+        count++;
+      }
+      tuple_cell.set_data((char *)(new int32_t(count)));
+    }
     return SUCCESS;
   }
 
-  RC get_max(int idx, std::vector<Tuple *> tmp_tuples, AttrType attrType, TupleCell & tuple_cell)
+  static RC get_max(int idx, std::vector<Tuple *> tmp_tuples, AttrType attrType, TupleCell & tuple_cell)
   {
     tuple_cell.set_type(attrType);
+    int32_t count = 0;
     switch (attrType) {
       case INTS: case DATES: {
         int mx = INT32_MIN;
         for (auto tuple : tmp_tuples) {
           TupleCell tmp_cell;
           tuple->cell_at(idx, tmp_cell);
+          if (tmp_cell.attr_type() == NULL_T) continue;
+          count++;
           mx = std::max(mx, *(int *)tmp_cell.data());
         }
         tuple_cell.set_data((char *)(new int32_t(mx)));
@@ -454,6 +471,8 @@ public:
         for (auto tuple : tmp_tuples) {
           TupleCell tmp_cell;
           tuple->cell_at(idx, tmp_cell);
+          if (tmp_cell.attr_type() == NULL_T) continue;
+          count++;
           mx = std::max(mx, *(float *)tmp_cell.data());
         }
         tuple_cell.set_data((char *)(new float (mx)));
@@ -465,6 +484,8 @@ public:
         for (auto tuple : tmp_tuples) {
           TupleCell tmp_cell;
           tuple->cell_at(idx, tmp_cell);
+          if (tmp_cell.attr_type() == NULL_T) continue;
+          count++;
           if (mx == nullptr) {
             mx = (char *)tmp_cell.data();
             mx_length = tmp_cell.length();
@@ -483,18 +504,24 @@ public:
       default:
         return RC::GENERIC_ERROR;
     }
+    if (count == 0) {
+      tuple_cell.set_type(NULL_T);
+    }
     return RC::SUCCESS;
   }
 
-  RC get_min(int idx, std::vector<Tuple *> tmp_tuples, AttrType attrType, TupleCell & tuple_cell)
+  static RC get_min(int idx, std::vector<Tuple *> tmp_tuples, AttrType attrType, TupleCell & tuple_cell)
   {
     tuple_cell.set_type(attrType);
+    int32_t count = 0;
     switch (attrType) {
       case INTS: case DATES: {
         int mn = INT32_MAX;
         for (auto tuple : tmp_tuples) {
           TupleCell tmp_cell;
           tuple->cell_at(idx, tmp_cell);
+          if (tmp_cell.attr_type() == NULL_T) continue;
+          count++;
           mn = std::min(mn, *(int *)tmp_cell.data());
         }
         tuple_cell.set_data((char *)(new int32_t(mn)));
@@ -506,6 +533,8 @@ public:
         for (auto tuple : tmp_tuples) {
           TupleCell tmp_cell;
           tuple->cell_at(idx, tmp_cell);
+          if (tmp_cell.attr_type() == NULL_T) continue;
+          count++;
           mn = std::min(mn, *(float *)tmp_cell.data());
         }
         tuple_cell.set_data((char *)(new float (mn)));
@@ -518,6 +547,8 @@ public:
         for (auto tuple : tmp_tuples) {
           TupleCell tmp_cell;
           tuple->cell_at(idx, tmp_cell);
+          if (tmp_cell.attr_type() == NULL_T) continue;
+          count++;
           if (mn == nullptr) {
             mn = (char *)tmp_cell.data();
             mn_length = tmp_cell.length();
@@ -536,19 +567,23 @@ public:
       default:
         return RC::GENERIC_ERROR;
     }
+    if (count == 0) {
+      tuple_cell.set_type(NULL_T);
+    }
     return RC::SUCCESS;
   }
 
-  RC get_avg(int idx, std::vector<Tuple *> tmp_tuples, AttrType attrType, TupleCell & tuple_cell)
+  static RC get_avg(int idx, std::vector<Tuple *> tmp_tuples, AttrType attrType, TupleCell & tuple_cell)
   {
     tuple_cell.set_type(FLOATS);
     float sum = 0;
-    int count = 0;
+    int32_t count = 0;
     switch (attrType) {
       case INTS: {
         for (auto tuple : tmp_tuples) {
           TupleCell tmp_cell;
           tuple->cell_at(idx, tmp_cell);
+          if (tmp_cell.attr_type() == NULL_T) continue;
           sum += *(int *)tmp_cell.data();
           count++;
         }
@@ -558,6 +593,7 @@ public:
         for (auto tuple : tmp_tuples) {
           TupleCell tmp_cell;
           tuple->cell_at(idx, tmp_cell);
+          if (tmp_cell.attr_type() == NULL_T) continue;
           sum += *(float *)tmp_cell.data();
           count++;
         }
@@ -567,6 +603,7 @@ public:
         for (auto tuple : tmp_tuples) {
           TupleCell tmp_cell;
           tuple->cell_at(idx, tmp_cell);
+          if (tmp_cell.attr_type() == NULL_T) continue;
           int length = tmp_cell.length();
           int dot_count = 0;
           int slice = 0;
@@ -598,23 +635,27 @@ public:
         return RC::GENERIC_ERROR;
     }
     if (count == 0) {
-      count = 1;
+      tuple_cell.set_type(NULL_T);
+    } else {
+      float precised_ans = (int)(sum / count * 100) / 100.0;
+      tuple_cell.set_data((char *)(new float(precised_ans)));
+      tuple_cell.set_length(sizeof(float));
     }
-    float precised_ans = (int)(sum / count * 100) / 100.0;
-    tuple_cell.set_data((char *)(new float(precised_ans)));
-    tuple_cell.set_length(sizeof(float));
     return RC::SUCCESS;
   }
 
-  RC get_sum(int idx, std::vector<Tuple *> tmp_tuples, AttrType attrType, TupleCell & tuple_cell)
+  static RC get_sum(int idx, std::vector<Tuple *> tmp_tuples, AttrType attrType, TupleCell & tuple_cell)
   {
     tuple_cell.set_type(FLOATS);
     float sum = 0;
+    int32_t count = 0;
     switch (attrType) {
       case INTS: {
         for (auto tuple : tmp_tuples) {
           TupleCell tmp_cell;
           tuple->cell_at(idx, tmp_cell);
+          if (tmp_cell.attr_type() == NULL_T) continue;
+          count++;
           sum += *(int *)tmp_cell.data();
         }
         break;
@@ -623,6 +664,8 @@ public:
         for (auto tuple : tmp_tuples) {
           TupleCell tmp_cell;
           tuple->cell_at(idx, tmp_cell);
+          if (tmp_cell.attr_type() == NULL_T) continue;
+          count++;
           sum += *(float *)tmp_cell.data();
         }
         break;
@@ -631,6 +674,8 @@ public:
         for (auto tuple : tmp_tuples) {
           TupleCell tmp_cell;
           tuple->cell_at(idx, tmp_cell);
+          if (tmp_cell.attr_type() == NULL_T) continue;
+          count++;
           int length = tmp_cell.length();
           int dot_count = 0;
           int slice = 0;
@@ -660,13 +705,17 @@ public:
       default:
         return RC::GENERIC_ERROR;
     }
-    float precised_ans = (int)(sum * 100) / 100.0;
-    tuple_cell.set_data((char *)(new float(precised_ans)));
-    tuple_cell.set_length(sizeof(float));
+    if (count == 0) {
+      tuple_cell.set_type(NULL_T);
+    } else {
+      float precised_ans = (int)(sum * 100) / 100.0;
+      tuple_cell.set_data((char *)(new float(precised_ans)));
+      tuple_cell.set_length(sizeof(float));
+    }
     return RC::SUCCESS;
   }
 
-  RC get_none(int idx, std::vector<Tuple *> tmp_tuples, AttrType attrType, TupleCell & tuple_cell)
+  static RC get_none(int idx, std::vector<Tuple *> tmp_tuples, AttrType attrType, TupleCell & tuple_cell)
   {
     tuple_cell.set_type(attrType);
     TupleCell tmp_cell;
@@ -681,7 +730,7 @@ public:
     TupleCell tupleCell;
     switch (agg_type) {
       case AGG_COUNT:
-        get_count(idx, tmp_tuples, attr_type, tupleCell);
+        get_count(strcmp(speces_[idx]->alias(), "*") == 0, idx, tmp_tuples, attr_type, tupleCell);
         break;
       case AGG_MAX:
         get_max(idx, tmp_tuples, attr_type, tupleCell);
