@@ -50,8 +50,13 @@ public:
   {
     return attr_type_;
   }
-
+  bool is_set = 0;
+  std::vector<TupleCell *> set_cells;
+  int not_equal(const TupleCell &other) const;
+  int satisfy_in(const TupleCell &other) const;
+  int satisfy_not_in(const TupleCell &other) const;
 private:
+  static bool is_match(const char * str, const char * pattern, size_t pattern_length);
   AttrType attr_type_ = UNDEFINED;
   int length_ = -1;
   char *data_ = nullptr; // real data. no need to move to field_meta.offset

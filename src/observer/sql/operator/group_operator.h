@@ -29,6 +29,7 @@ public:
 
   Tuple * current_tuple() override;
 private:
+  int first_next_ = 1;
   bool do_having_predicate_(std::vector<Tuple *> & tmp_tuples);
   bool in_group(Tuple * t1, Tuple * t2);
   int32_t current_tuple_count_;

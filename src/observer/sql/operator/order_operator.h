@@ -15,6 +15,7 @@ public:
   }
 
   virtual ~OrderOperator() {
+    // TODO: free tuple memory
 //    for (auto &tuple : all_tuples_) {
 //      delete tuple;
 //    }

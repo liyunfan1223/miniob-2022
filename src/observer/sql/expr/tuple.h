@@ -128,10 +128,15 @@ public:
     const TupleCellSpec *spec = speces_[index];
     FieldExpr *field_expr = (FieldExpr *)spec->expression();
     const FieldMeta *field_meta = field_expr->field().meta();
-//    bool is_null = this->record_->data() +
-    cell.set_type(field_meta->type());
-    cell.set_data(this->record_->data() + field_meta->offset());
-    cell.set_length(field_meta->len());
+    int null_mask = *(int *)(this->record_->data() + TableMeta::null_field_offset);
+    bool is_null = (null_mask & (1 << (index - TableMeta::system_field_num)));
+    if (is_null) {
+      cell.set_type(NULL_T);
+    } else {
+      cell.set_type(field_meta->type());
+      cell.set_data(this->record_->data() + field_meta->offset());
+      cell.set_length(field_meta->len());
+    }
     return RC::SUCCESS;
   }
 
@@ -148,6 +153,18 @@ public:
       const Field &field = field_expr->field();
       if (0 == strcmp(field_name, field.field_name())) {
 	return cell_at(i, cell);
+      }
+    }
+    return RC::NOTFOUND;
+  }
+
+  RC find_cell(const char *table_name, const char *field_name, TupleCell &cell) const override
+  {
+    for (size_t i = 0; i < speces_.size(); ++i) {
+      const FieldExpr * field_expr = (const FieldExpr *)speces_[i]->expression();
+      const Field &field = field_expr->field();
+      if (0 == strcmp(field_name, field.field_name())) {
+        return cell_at(i, cell);
       }
     }
     return RC::NOTFOUND;
@@ -239,8 +256,8 @@ public:
 
     if (field_meta->nullable()) {
       int32_t null_mask = 0;
-      null_mask = *(int *)(record_now->data() + 4);
-      if (null_mask & (1 << (idx_in_rec - 2))) {
+      null_mask = *(int *)(record_now->data() + TableMeta::null_field_offset);
+      if (null_mask & (1 << (idx_in_rec - TableMeta::system_field_num))) {
         cell.set_type(NULL_T);
       }
     }

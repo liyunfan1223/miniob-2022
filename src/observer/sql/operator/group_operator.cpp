@@ -50,6 +50,16 @@ bool GroupOperator::in_group(Tuple *t1, Tuple *t2)
 
 RC GroupOperator::next()
 {
+  if (first_next_ && (int32_t) all_tuples_.size() == 0) {
+    first_next_ = 0;
+    std::vector<Tuple *> tmp_tuples;
+    tuple_.tuple_cells_.clear();
+    for (int i = 0; i < (int32_t)tuple_.speces_.size(); i++) {
+      tuple_.set_tuple_cells(i, tmp_tuples);
+    }
+    return RC::SUCCESS;
+  }
+
   if (current_tuple_count_ >= (int32_t) all_tuples_.size()) {
     return RC::RECORD_EOF;
   }

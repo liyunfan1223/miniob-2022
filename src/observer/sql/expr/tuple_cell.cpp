@@ -97,28 +97,180 @@ int TupleCell::compare(const TupleCell &other) const
   return -1; // TODO return rc?
 }
 
+int TupleCell::not_equal(const TupleCell &other) const
+{
+  if (this->attr_type_ == NULL_T || other.attr_type() == NULL_T) {
+    return 0;
+  }
+  return this->compare(other) != 0;
+}
+
+int TupleCell::satisfy_in(const TupleCell &other) const
+{
+  if (this->attr_type_ == NULL_T || other.attr_type() == NULL_T) {
+    return 0;
+  }
+  return this->compare(other) == 0;
+}
+
+int TupleCell::satisfy_not_in(const TupleCell &other) const
+{
+  if (this->attr_type_ == NULL_T || other.attr_type() == NULL_T) {
+    return 0;
+  }
+  return this->compare(other) != 0;
+}
+
+bool TupleCell::is_match(const char * str, const char * pattern, size_t pattern_length)
+{
+  size_t str_length = strlen(str);
+  bool match_dp[str_length + 1][pattern_length + 1];
+  memset(match_dp, 0, sizeof(match_dp));
+  match_dp[0][0] = 1;
+  for (size_t i = 0; i <= str_length; i++) {
+    for (size_t j = 1; j <= pattern_length; j++) {
+      switch (pattern[j - 1]) {
+        case '%': {
+          for (size_t k = 0; k <= i; k++) {
+            if (match_dp[k][j - 1] == 1) {
+              match_dp[i][j] = 1;
+            }
+          }
+        } break;
+        case '_': {
+          if (i >= 1) {
+            match_dp[i][j] = match_dp[i - 1][j - 1];
+          }
+        } break;
+        default: {
+          if (i >= 1 && pattern[j - 1] == str[i - 1]) {
+            match_dp[i][j] = match_dp[i - 1][j - 1];
+          }
+        }
+      }
+    }
+  }
+  return match_dp[str_length][pattern_length];
+}
+
 int TupleCell::condition_satisfy(CompOp comp, const TupleCell & other) const
 {
   const int compare = this->compare(other);
   int filter_result = 0;
   switch (comp) {
     case EQUAL_TO: {
-      filter_result = (0 == compare);
+      if (other.is_set) {
+        throw 0;
+      }
+      if (other.attr_type() == NULL_T || this->attr_type() == NULL_T) {
+        filter_result = 0;
+      } else {
+        filter_result = (0 == compare);
+      }
     } break;
     case LESS_EQUAL: {
-      filter_result = (compare <= 0);
+      if (other.is_set) {
+        throw 0;
+      }if (other.attr_type() == NULL_T || this->attr_type() == NULL_T) {
+        filter_result = 0;
+      } else {
+        filter_result = (compare <= 0);
+      }
     } break;
     case NOT_EQUAL: {
-      filter_result = (compare != 0);
+      if (other.is_set) {
+        throw 0;
+      }
+      if (other.attr_type() == NULL_T || this->attr_type() == NULL_T) {
+        filter_result = 0;
+      } else {
+        filter_result = this->not_equal(other);
+      }
     } break;
     case LESS_THAN: {
-      filter_result = (compare < 0);
+      if (other.is_set) {
+        throw 0;
+      }
+      if (other.attr_type() == NULL_T || this->attr_type() == NULL_T) {
+        filter_result = 0;
+      } else {
+        filter_result = (compare < 0);
+      }
     } break;
     case GREAT_EQUAL: {
-      filter_result = (compare >= 0);
+      if (other.is_set) {
+        throw 0;
+      }
+      if (other.attr_type() == NULL_T || this->attr_type() == NULL_T) {
+        filter_result = 0;
+      } else {
+        filter_result = (compare >= 0);
+      }
     } break;
     case GREAT_THAN: {
-      filter_result = (compare > 0);
+      if (other.is_set) {
+        throw 0;
+      }
+      if (other.attr_type() == NULL_T || this->attr_type() == NULL_T) {
+        filter_result = 0;
+      } else {
+        filter_result = (compare > 0);
+      }
+    } break;
+    case LIKE_TO: {
+      assert(this->attr_type() == other.attr_type() && this->attr_type() == CHARS);
+      if (other.attr_type() == NULL_T || this->attr_type() == NULL_T) {
+        filter_result = 0;
+      } else {
+        filter_result = is_match(this->data(), other.data(), other.length());
+      }
+    } break;
+    case NOT_LIKE_TO: {
+      assert(this->attr_type() == other.attr_type() && this->attr_type() == CHARS);
+      if (other.attr_type() == NULL_T || this->attr_type() == NULL_T) {
+        filter_result = 0;
+      } else {
+        filter_result = !is_match(this->data(), other.data(), other.length());
+      }
+    } break;
+    case IN_OP: {
+      if (other.is_set) {
+        for (auto &tupleCell : other.set_cells) {
+          if (this->satisfy_in(*tupleCell)) {
+            filter_result = 1;
+          }
+        }
+      } else {
+        if (this->satisfy_in(other)) {
+          filter_result = 1;
+        }
+      }
+    } break;
+    case NOT_IN_OP: {
+      filter_result = 1;
+      if (other.is_set) {
+        for (auto & tupleCell : other.set_cells) {
+          if (!this->satisfy_not_in(*tupleCell)) {
+            filter_result = 0;
+          }
+        }
+      } else {
+        if (!this->satisfy_not_in(other)) {
+          filter_result = 0;
+        }
+      }
+    } break;
+    case IS_OP: {
+      assert(other.attr_type() == NULL_T);
+      if (this->attr_type() == NULL_T) {
+        filter_result = 1;
+      }
+    } break;
+    case IS_NOT_OP: {
+      assert(other.attr_type() == NULL_T);
+      if (this->attr_type() != NULL_T) {
+        filter_result = 1;
+      }
     } break;
     default: {
       assert(false); // unimplemented

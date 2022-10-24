@@ -119,6 +119,7 @@ private:
 
 public:
   Index *find_index(const char *index_name) const;
+  std::string get_index() const;
   Index *find_index_by_field(const char *field_name) const;
 
 private:

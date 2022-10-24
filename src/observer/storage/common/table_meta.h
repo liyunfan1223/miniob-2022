@@ -38,6 +38,8 @@ public:
 
 public:
   static const int32_t null_field_start_index = 1;
+  static const int32_t null_field_offset = 4;
+  static const int32_t system_field_num = 2;
   const char *name() const;
   const FieldMeta *trx_field() const;
   const FieldMeta *field(int index) const;

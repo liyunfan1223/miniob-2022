@@ -12,8 +12,9 @@ RC OrderOperator::open()
 
   while(child->next() != RECORD_EOF) {
     Tuple * tuple = child->current_tuple();
-    auto joinTuple = static_cast<JoinTuple *>(tuple);
-    all_tuples_.push_back(new JoinTuple(*joinTuple));
+//    auto joinTuple = static_cast<JoinTuple *>(tuple);
+//    all_tuples_.push_back(new JoinTuple(*joinTuple));
+    all_tuples_.push_back(tuple);
   }
   std::sort(all_tuples_.begin(), all_tuples_.end(), [&](Tuple * t1, Tuple * t2) {
     for (size_t i = 0; i < order_num_; i++) {

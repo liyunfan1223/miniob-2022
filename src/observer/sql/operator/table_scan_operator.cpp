@@ -19,9 +19,9 @@ See the Mulan PSL v2 for more details. */
 RC TableScanOperator::open()
 {
   RC rc = table_->get_record_scanner(record_scanner_);
-  if (rc == RC::SUCCESS) {
-    tuple_.set_schema(table_, table_->table_meta().field_metas());
-  }
+//  if (rc == RC::SUCCESS) {
+//    tuple_->set_schema(table_, table_->table_meta().field_metas());
+//  }
   return rc;
 }
 
@@ -30,8 +30,8 @@ RC TableScanOperator::next()
   if (!record_scanner_.has_next()) {
     return RC::RECORD_EOF;
   }
-
-  RC rc = record_scanner_.next(current_record_);
+  current_record_ = new Record();
+  RC rc = record_scanner_.next(*current_record_);
   return rc;
 }
 
@@ -42,8 +42,10 @@ RC TableScanOperator::close()
 
 Tuple * TableScanOperator::current_tuple()
 {
-  tuple_.set_record(&current_record_);
-  return &tuple_;
+  tuple_ = new RowTuple();
+  tuple_->set_record(current_record_);
+  tuple_->set_schema(table_, table_->table_meta().field_metas());
+  return tuple_;
 }
 
 Table * TableScanOperator::table()

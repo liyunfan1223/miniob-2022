@@ -117,7 +117,7 @@ RC FilterStmt::create_filter_unit(Db *db, Table *default_table, std::unordered_m
   if (condition.left_is_attr) {
     Table *table = nullptr;
     const FieldMeta *field = nullptr;
-    rc = get_table_and_field(db, default_table, tables, condition.left_attr, table, field);  
+    rc = get_table_and_field(db, default_table, tables, condition.left_attr, table, field);
     if (rc != RC::SUCCESS) {
       LOG_WARN("cannot find attr");
       return rc;
@@ -160,7 +160,8 @@ RC FilterStmt::create_filter_unit(Db *db, Table *default_table, std::unordered_m
   }
 
   if (right_attr != left_attr &&
-      (right_attr == DATES || left_attr == DATES)) {
+      (right_attr == DATES || left_attr == DATES) &&
+      (right_attr == CHARS || left_attr == CHARS) ) {
     LOG_WARN("date type invalid.");
     return GENERIC_ERROR;
   }

@@ -80,18 +80,27 @@ void value_init_integer(Value *value, int v)
 {
   value->type = INTS;
   value->data = malloc(sizeof(v));
+  value->is_null = 0;
+  value->is_set = 0;
+  value->is_sub_select = 0;
   memcpy(value->data, &v, sizeof(v));
 }
 void value_init_float(Value *value, float v)
 {
   value->type = FLOATS;
   value->data = malloc(sizeof(v));
+  value->is_null = 0;
+  value->is_set = 0;
+  value->is_sub_select = 0;
   memcpy(value->data, &v, sizeof(v));
 }
 
 int value_init_date(Value *value, const char *v)
 {
   value->type = DATES;
+  value->is_null = 0;
+  value->is_set = 0;
+  value->is_sub_select = 0;
   value->data = malloc(sizeof(int));
 
   int y, m, d;
@@ -104,6 +113,9 @@ int value_init_date(Value *value, const char *v)
 void value_init_string(Value *value, const char *v)
 {
   value->type = CHARS;
+  value->is_null = 0;
+  value->is_set = 0;
+  value->is_sub_select = 0;
   value->data = strdup(v);
 }
 
@@ -111,7 +123,29 @@ void value_init_null(Value *value)
 {
   value->type = NULL_T;
   value->is_null = 1;
+  value->is_set = 0;
+  value->is_sub_select = 0;
   value->data = (void *)malloc(sizeof(int32_t));
+}
+
+void value_init_sub_select(Value *value, Selects * select)
+{
+  value->is_null = 0;
+  value->is_set = 0;
+  value->is_sub_select = 1;
+  value->selects = new Selects(*select);
+}
+
+void value_init_set(Value *value, Value * set_values, size_t set_num)
+{
+  value->set_values = (Value *)malloc(set_num * sizeof(Value));
+  for (size_t i = 0; i < set_num; i++) {
+    value->set_values[i] = *(new Value(set_values[i]));
+  }
+  value->is_null = 0;
+  value->is_sub_select = 0;
+  value->is_set = 1;
+  value->set_length = set_num;
 }
 
 void value_destroy(Value *value)
@@ -124,6 +158,27 @@ void value_destroy(Value *value)
 void condition_init(Condition *condition, CompOp comp, int left_is_attr, RelAttr *left_attr, Value *left_value,
     int right_is_attr, RelAttr *right_attr, Value *right_value)
 {
+  condition->conj = CONJ_AND;
+  condition->comp = comp;
+  condition->left_is_attr = left_is_attr;
+  if (left_is_attr) {
+    condition->left_attr = *left_attr;
+  } else {
+    condition->left_value = *left_value;
+  }
+
+  condition->right_is_attr = right_is_attr;
+  if (right_is_attr) {
+    condition->right_attr = *right_attr;
+  } else {
+    condition->right_value = *right_value;
+  }
+}
+
+void condition_conj_init(Condition *condition, CompOp comp, int left_is_attr, RelAttr *left_attr, Value *left_value,
+    int right_is_attr, RelAttr *right_attr, Value *right_value, Conjunction conj)
+{
+  condition->conj = conj;
   condition->comp = comp;
   condition->left_is_attr = left_is_attr;
   if (left_is_attr) {
@@ -192,7 +247,10 @@ void selects_append_relation(Selects *selects, const char *relation_name)
 {
   selects->relations[selects->relation_num++] = strdup(relation_name);
 }
-
+void selects_append_condition(Selects *selects, Condition * condition)
+{
+  selects->conditions[selects->condition_num++] = *condition;
+}
 void selects_append_conditions(Selects *selects, Condition conditions[], size_t condition_num)
 {
   assert(condition_num <= sizeof(selects->conditions) / sizeof(selects->conditions[0]));

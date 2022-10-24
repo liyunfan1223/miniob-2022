@@ -35,6 +35,7 @@ See the Mulan PSL v2 for more details. */
 #include "sql/operator/project_operator.h"
 #include "sql/operator/order_operator.h"
 #include "sql/operator/group_operator.h"
+#include "sql/operator/subquery_predicate_operator.h"
 
 #include "sql/stmt/stmt.h"
 #include "sql/stmt/select_stmt.h"
@@ -141,7 +142,12 @@ void ExecuteStage::handle_request(common::StageEvent *event)
   if (stmt != nullptr) {
     switch (stmt->type()) {
     case StmtType::SELECT: {
-      do_select(sql_event);
+      try {
+        do_select(sql_event);
+      } catch (...) {
+        const char *response = "FAILURE\n";
+        session_event->set_response(response);
+      }
     } break;
     case StmtType::INSERT: {
       do_insert(sql_event);
@@ -216,6 +222,7 @@ void ExecuteStage::handle_request(common::StageEvent *event)
     } break;
     case SCF_SHOW_INDEX: {
       // TODO
+      do_show_index(sql_event);
     } break;
     default: {
       LOG_ERROR("Unsupported command=%d\n", sql->flag);
@@ -527,6 +534,25 @@ RC check_attr_in_group(size_t attr_num, RelAttr * attrs, size_t group_num, Group
   return SUCCESS;
 }
 
+RC replace_exists(Selects & selects) {
+  for (size_t i = 0; i < selects.condition_num; i++) {
+    Condition & cond = selects.conditions[i];
+    if (cond.comp == EXISTS_OP || cond.comp == NOT_EXISTS_OP) {
+      cond.right_value.selects->attributes[0].is_agg = 1;
+      cond.right_value.selects->attributes[0].aggType = AGG_COUNT;
+      cond.right_value.selects->attributes[0].relation_name = nullptr;
+      cond.right_value.selects->attributes[0].attribute_name = (char *)"*";
+    }
+    if (cond.comp == EXISTS_OP) {
+      cond.comp = LESS_THAN;
+    }
+    if (cond.comp == NOT_EXISTS_OP) {
+      cond.comp = EQUAL_TO;
+    }
+  }
+  return SUCCESS;
+}
+
 RC ExecuteStage::do_select(SQLStageEvent *sql_event)
 {
   SelectStmt *select_stmt = (SelectStmt *)(sql_event->stmt());
@@ -534,6 +560,8 @@ RC ExecuteStage::do_select(SQLStageEvent *sql_event)
   Selects & selects = sql_event->query()->sstr.selection;
   Db *db = session_event->session()->get_current_db();
   RC rc = RC::SUCCESS;
+
+  replace_exists(selects);
   std::vector<TableScanOperator *> scan_opers;
 
   std::vector<Table *> tables;
@@ -543,9 +571,18 @@ RC ExecuteStage::do_select(SQLStageEvent *sql_event)
   for (auto table : tables) {
     scan_opers.push_back(new TableScanOperator(table));
   }
+
+  SubqueryPredicateOperator pred_oper(selects.conditions, selects.condition_num, tables[0]->name(), db);
+  pred_oper.add_child(scan_opers[0]);
+
   TablesJoinPredOperator join_pred_oper(scan_opers, select_stmt->filter_stmt());
+
   OrderOperator order_by_oper(selects.order_num, selects.order_attributes);
-  order_by_oper.add_child(&join_pred_oper);
+  if (scan_opers.size() == 1) {
+    order_by_oper.add_child(&pred_oper);
+  } else {
+    order_by_oper.add_child(&join_pred_oper);
+  }
 
   ProjectOperator project_oper;
   project_oper.add_child(&order_by_oper);
@@ -645,7 +682,24 @@ RC ExecuteStage::do_create_index(SQLStageEvent *sql_event)
   sql_event->session_event()->set_response(rc == RC::SUCCESS ? "SUCCESS\n" : "FAILURE\n");
   return rc;
 }
-
+RC ExecuteStage::do_show_index(SQLStageEvent *sql_event)
+{
+  const char * table_name = sql_event->query()->sstr.show_index.relation_name;
+  SessionEvent *session_event = sql_event->session_event();
+  Db *db = session_event->session()->get_current_db();
+  Table *table = db->find_table(table_name);
+  if (table==nullptr){
+    session_event->set_response("FAILURE\n");
+    return RC::SCHEMA_TABLE_NOT_EXIST;
+  }
+  std::stringstream ss;
+  std::string s;
+  ss<<"Table | Non_unique | Key_name | Seq_in_index | Column_name"<<std::endl;
+  s=table->get_index();
+  ss<<s;
+  session_event->set_response(ss.str().c_str());
+  return RC::SUCCESS;
+}
 RC ExecuteStage::do_show_tables(SQLStageEvent *sql_event)
 {
   SessionEvent *session_event = sql_event->session_event();

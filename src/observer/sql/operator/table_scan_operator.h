@@ -44,6 +44,6 @@ public:
 private:
   Table *table_ = nullptr;
   RecordFileScanner record_scanner_;
-  Record current_record_;
-  RowTuple tuple_;
+  Record * current_record_;
+  RowTuple * tuple_;
 };

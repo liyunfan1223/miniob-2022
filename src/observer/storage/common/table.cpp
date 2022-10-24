@@ -1018,7 +1018,6 @@ RC Table::delete_entry_of_indexes(const char *record, const RID &rid, bool error
   }
   return rc;
 }
-
 Index *Table::find_index(const char *index_name) const
 {
   for (Index *index : indexes_) {
@@ -1027,6 +1026,22 @@ Index *Table::find_index(const char *index_name) const
     }
   }
   return nullptr;
+}
+std::string Table::get_index() const
+{
+  std::string base,s;
+//  "Table | Non_unique | Key_name | Seq_in_index | Column_name\n";
+  base+=table_meta_.name();
+  base+=+" | ";
+  base+="1";//不适用于unique
+  base+=+" | ";
+  for (Index *index : indexes_) {
+    std::string Key_name=index->index_meta().name();
+    std::string Seq_in_index="1";//不适用于muti-index
+    std::string Column_name=index->index_meta().field();
+    s+=base+Key_name+" | "+Seq_in_index+" | "+Column_name+"\n";
+  }
+  return s;
 }
 Index *Table::find_index_by_field(const char *field_name) const
 {

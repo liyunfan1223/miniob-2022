@@ -62,6 +62,12 @@ typedef enum {
   GREAT_THAN,   //">"     5
   LIKE_TO,
   NOT_LIKE_TO,
+  IN_OP,
+  NOT_IN_OP,
+  EXISTS_OP,
+  NOT_EXISTS_OP,
+  IS_OP,
+  IS_NOT_OP,
   NO_OP
 } CompOp;
 
@@ -77,11 +83,24 @@ typedef enum
   NULL_T,
 } AttrType;
 
-//属性值
+typedef enum {
+  CONJ_FIRST,
+  CONJ_AND,
+  CONJ_OR
+} Conjunction;
+
+typedef struct _Selects Selects;
+typedef struct _Value Value;
+
 typedef struct _Value {
   AttrType type;  // type of value
   void *data;     // value
   size_t is_null;
+  int is_sub_select;
+  Selects * selects;
+  int is_set;
+  int set_length;
+  Value * set_values;
 } Value;
 
 typedef struct _Condition {
@@ -94,10 +113,14 @@ typedef struct _Condition {
                        // 1时，操作符右边是属性名，0时，是属性值
   RelAttr right_attr;  // right-hand side attribute if right_is_attr = TRUE 右边的属性
   Value right_value;   // right-hand side value if right_is_attr = FALSE
+
+  Conjunction conj;
 } Condition;
 
+
+
 // struct of select
-typedef struct {
+typedef struct _Selects {
   size_t attr_num;                // Length of attrs in Select clause
   RelAttr attributes[MAX_NUM];    // attrs in Select clause
   size_t relation_num;            // Length of relations in Fro clause
@@ -239,10 +262,16 @@ void value_init_integer(Value *value, int v);
 void value_init_float(Value *value, float v);
 int value_init_date(Value *value, const char *v);
 void value_init_string(Value *value, const char *v);
+void value_init_null(Value *value);
+void value_init_sub_select(Value *value, Selects * select);
+void value_init_set(Value *value, Value * set_values, size_t set_num);
+
 void value_destroy(Value *value);
 
 void condition_init(Condition *condition, CompOp comp, int left_is_attr, RelAttr *left_attr, Value *left_value,
     int right_is_attr, RelAttr *right_attr, Value *right_value);
+void condition_conj_init(Condition *condition, CompOp comp, int left_is_attr, RelAttr *left_attr, Value *left_value,
+    int right_is_attr, RelAttr *right_attr, Value *right_value, Conjunction conj);
 void condition_destroy(Condition *condition);
 
 void attr_info_init(AttrInfo *attr_info, const char *name, AttrType type, size_t length);
@@ -252,6 +281,7 @@ void attr_info_destroy(AttrInfo *attr_info);
 void selects_init(Selects *selects, ...);
 void selects_append_attribute(Selects *selects, RelAttr *rel_attr);
 void selects_append_relation(Selects *selects, const char *relation_name);
+void selects_append_condition(Selects *selects, Condition * condition);
 void selects_append_conditions(Selects *selects, Condition conditions[], size_t condition_num);
 void selects_append_having_conditions(Selects *selects, Condition conditions[], size_t condition_num);
 void selects_append_having_condition(Selects *selects, Condition * condition);

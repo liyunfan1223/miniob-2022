@@ -70,7 +70,7 @@ RC TablesJoinPredOperator::close()
 Tuple *TablesJoinPredOperator::current_tuple()
 {
   tuple_.set_records(&current_records_);
-  return &tuple_;
+  return new JoinTuple(tuple_);
 }
 
 RC TablesJoinPredOperator::cartesian_product_dfs_(int table_index)
@@ -163,41 +163,7 @@ bool TablesJoinPredOperator::do_predicate_( std::vector<Record *> &records, int 
     TupleCell right_cell;
     left_expr->get_value(tuple_, left_cell);
     right_expr->get_value(tuple_, right_cell);
-
-    const int compare = left_cell.compare(right_cell);
-    bool filter_result = false;
-    switch (comp) {
-      case EQUAL_TO: {
-        filter_result = (0 == compare);
-      } break;
-      case LESS_EQUAL: {
-        filter_result = (compare <= 0);
-      } break;
-      case NOT_EQUAL: {
-        filter_result = (compare != 0);
-      } break;
-      case LESS_THAN: {
-        filter_result = (compare < 0);
-      } break;
-      case GREAT_EQUAL: {
-        filter_result = (compare >= 0);
-      } break;
-      case GREAT_THAN: {
-        filter_result = (compare > 0);
-      } break;
-      case LIKE_TO: {
-        assert(left_cell.attr_type() == right_cell.attr_type() && left_cell.attr_type() == CHARS);
-        filter_result = is_match(left_cell.data(), right_cell.data(), right_cell.length());
-      } break;
-      case NOT_LIKE_TO: {
-        assert(left_cell.attr_type() == right_cell.attr_type() && left_cell.attr_type() == CHARS);
-        filter_result = !is_match(left_cell.data(), right_cell.data(), right_cell.length());
-      } break;
-      default: {
-        LOG_WARN("invalid compare type: %d", comp);
-      } break;
-    }
-    if (!filter_result) {
+    if (!left_cell.condition_satisfy(comp, right_cell)) {
       return false;
     }
   }
