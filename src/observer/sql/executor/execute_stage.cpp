@@ -153,7 +153,7 @@ void ExecuteStage::handle_request(common::StageEvent *event)
       do_insert(sql_event);
     } break;
     case StmtType::UPDATE: {
-      do_update((UpdateStmt *)stmt, session_event);
+      do_update(sql_event);
     } break;
     case StmtType::DELETE: {
       do_delete(sql_event);
@@ -671,14 +671,14 @@ RC ExecuteStage::do_create_index(SQLStageEvent *sql_event)
 {
   SessionEvent *session_event = sql_event->session_event();
   Db *db = session_event->session()->get_current_db();
-  const CreateIndex &create_index = sql_event->query()->sstr.create_index;
+  CreateIndex &create_index = sql_event->query()->sstr.create_index;
   Table *table = db->find_table(create_index.relation_name);
   if (nullptr == table) {
     session_event->set_response("FAILURE\n");
     return RC::SCHEMA_TABLE_NOT_EXIST;
   }
 
-  RC rc = table->create_index(nullptr, create_index.index_name, create_index.attribute_name);
+  RC rc = table->create_index(nullptr, create_index.index_name, create_index.attribute_name, create_index.attr_num);
   sql_event->session_event()->set_response(rc == RC::SUCCESS ? "SUCCESS\n" : "FAILURE\n");
   return rc;
 }
@@ -795,23 +795,40 @@ RC ExecuteStage::do_insert(SQLStageEvent *sql_event)
   return rc;
 }
 
-RC ExecuteStage::do_update(UpdateStmt *stmt, SessionEvent *session_event)
+RC ExecuteStage::do_update(SQLStageEvent * sql_event) //UpdateStmt *stmt, SessionEvent *session_event)
 {
+  UpdateStmt *stmt = (UpdateStmt *)sql_event->stmt();
+  SessionEvent *session_event = sql_event->session_event();
+
   if (stmt == nullptr) {
     LOG_WARN("cannot find statement");
     return RC::GENERIC_ERROR;
   }
+  Updates & updates = sql_event->query()->sstr.update;
 
   UpdateStmt *update_stmt = (UpdateStmt *)stmt;
   Table *table = update_stmt->table();
-  const FieldMeta *field = table->table_meta().field(update_stmt->field_name());
+
+  std::vector<const FieldMeta *> fields;
+  std::vector<int> field_idxs;
+  for (size_t i = 0; i < update_stmt->field_names().size(); i++) {
+    const FieldMeta *field = table->table_meta().field(update_stmt->field_names()[i]);
+    int field_idx = table->table_meta().find_field_index_by_name(update_stmt->field_names()[i]);
+    fields.push_back(field);
+    field_idxs.push_back(field_idx);
+  }
 
   TableScanOperator scan_oper(update_stmt->table());
-  PredicateOperator pred_oper(update_stmt->filter_stmt());
-  pred_oper.add_child(&scan_oper);
+  Db *db = session_event->session()->get_current_db();
+
+  SubqueryPredicateOperator spred_oper(updates.conditions, updates.condition_num, updates.relation_name, db);
+
+  // pred_oper.add_child(&scan_oper);
+  spred_oper.add_child(&scan_oper);
 
   std::vector<Operator *> children;
-  children.push_back(&pred_oper);
+  // children.push_back(&pred_oper);
+  children.push_back(&spred_oper);
 
 
   if (children.size() != 1) {
@@ -838,7 +855,7 @@ RC ExecuteStage::do_update(UpdateStmt *stmt, SessionEvent *session_event)
 
     RowTuple *row_tuple = static_cast<RowTuple *>(tuple);
     Record &record = row_tuple->record();
-    rc = table->update_record(nullptr, &record,field, update_stmt->value());
+    rc = table->update_record(nullptr, &record,fields, update_stmt->values(), field_idxs, db);
     if (rc != RC::SUCCESS) {
       LOG_WARN("failed to delete record: %s", strrc(rc));
       session_event->set_response("FAILURE\n");

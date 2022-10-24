@@ -252,12 +252,20 @@ desc_table:
     ;
 
 create_index:		/*create index 语句的语法解析树*/
-    CREATE INDEX ID ON ID LBRACE ID RBRACE SEMICOLON 
-		{
-			CONTEXT->ssql->flag = SCF_CREATE_INDEX;//"create_index";
-			create_index_init(&CONTEXT->ssql->sstr.create_index, $3, $5, $7);
-		}
+    CREATE INDEX ID ON ID LBRACE index_col_ID_list RBRACE SEMICOLON
+    {
+	CONTEXT->ssql->flag = SCF_CREATE_INDEX;//"create_index";
+	create_index_multi_rel_init(&CONTEXT->ssql->sstr.create_index, $3, $5);
+    }
     ;
+index_col_ID_list:
+    /* empty */
+    | ID index_col_ID_list {
+	create_index_append_attr_name(&CONTEXT->ssql->sstr.create_index, $1);
+    }
+    | COMMA ID index_col_ID_list {
+	create_index_append_attr_name(&CONTEXT->ssql->sstr.create_index, $2);
+    }
 
 drop_index:			/*drop index 语句的语法解析树*/
     DROP INDEX ID  SEMICOLON 
@@ -585,15 +593,27 @@ delete:		/*  delete 语句的语法解析树*/
     }
     ;
 update:			/*  update 语句的语法解析树*/
-    UPDATE ID SET ID EQ value where SEMICOLON
+    UPDATE ID SET update_set_list where SEMICOLON
 		{
 			CONTEXT->ssql->flag = SCF_UPDATE;//"update";
-			Value *value = &CONTEXT->values[0];
-			updates_init(&CONTEXT->ssql->sstr.update, $2, $4, value, 
+			updates_init(&CONTEXT->ssql->sstr.update, $2,
 					CONTEXT->conditions, CONTEXT->condition_length);
 			CONTEXT->condition_length = 0;
 		}
     ;
+
+update_set_list:
+    /* empty */
+    | ID EQ value update_set_list {
+	Value *value = &CONTEXT->values[--CONTEXT->value_length];
+	updates_append_attr_and_value(&CONTEXT->ssql->sstr.update, $1, value);
+    }
+    | COMMA ID EQ value update_set_list {
+	Value *value = &CONTEXT->values[--CONTEXT->value_length];
+	updates_append_attr_and_value(&CONTEXT->ssql->sstr.update, $2, value);
+    }
+    ;
+
 select:				/*  select 语句的语法解析树*/
     SELECT attr_list FROM ID inner_join_list rel_list where group order SEMICOLON
 		{
@@ -706,15 +726,15 @@ condition:
     {
 	RelAttr left_attr;
 	relation_attr_init(&left_attr, NULL, $1);
-	Value *right_value = &CONTEXT->values[CONTEXT->value_length - 1];
+	Value *right_value = &CONTEXT->values[--CONTEXT->value_length];
 	Condition condition;
 	condition_conj_init(&condition, CONTEXT->comps[--CONTEXT->comp_num], 1, &left_attr, NULL, 0, NULL, right_value, CONTEXT->conj[--CONTEXT->conj_num]);
 	CONTEXT->conditions[CONTEXT->condition_length++] = condition;
     }
     |value comOp value
     {
-	Value *left_value = &CONTEXT->values[CONTEXT->value_length - 2];
-	Value *right_value = &CONTEXT->values[CONTEXT->value_length - 1];
+	Value *right_value = &CONTEXT->values[--CONTEXT->value_length];
+	Value *left_value = &CONTEXT->values[--CONTEXT->value_length];
 
 	Condition condition;
 	condition_conj_init(&condition, CONTEXT->comps[--CONTEXT->comp_num], 0, NULL, left_value, 0, NULL, right_value, CONTEXT->conj[--CONTEXT->conj_num]);
@@ -733,7 +753,7 @@ condition:
     }
     |value comOp ID
     {
-	Value *left_value = &CONTEXT->values[CONTEXT->value_length - 1];
+	Value *left_value = &CONTEXT->values[--CONTEXT->value_length];
 	RelAttr right_attr;
 	relation_attr_init(&right_attr, NULL, $3);
 
@@ -745,7 +765,7 @@ condition:
     {
 	RelAttr left_attr;
 	relation_attr_init(&left_attr, $1, $3);
-	Value *right_value = &CONTEXT->values[CONTEXT->value_length - 1];
+	Value *right_value = &CONTEXT->values[--CONTEXT->value_length];
 
 	Condition condition;
 	condition_conj_init(&condition, CONTEXT->comps[--CONTEXT->comp_num], 1, &left_attr, NULL, 0, NULL, right_value, CONTEXT->conj[--CONTEXT->conj_num]);
@@ -753,7 +773,7 @@ condition:
     }
     |value comOp ID DOT ID
     {
-	Value *left_value = &CONTEXT->values[CONTEXT->value_length - 1];
+	Value *left_value = &CONTEXT->values[--CONTEXT->value_length];
 
 	RelAttr right_attr;
 	relation_attr_init(&right_attr, $3, $5);
@@ -776,7 +796,7 @@ condition:
     | EXISTS value {
 	Value left_value;
 	value_init_integer(&left_value, 0);
-	Value *right_value = &CONTEXT->values[CONTEXT->value_length - 1];
+	Value *right_value = &CONTEXT->values[--CONTEXT->value_length];
 
 	Condition condition;
 	condition_conj_init(&condition, EXISTS_OP, 0, NULL, &left_value, 0, NULL, right_value, CONTEXT->conj[--CONTEXT->conj_num]);
@@ -785,7 +805,7 @@ condition:
     | NOT EXISTS value {
     	Value left_value;
         value_init_integer(&left_value, 0);
-    	Value *right_value = &CONTEXT->values[CONTEXT->value_length - 1];
+    	Value *right_value = &CONTEXT->values[--CONTEXT->value_length];
 
     	Condition condition;
     	condition_conj_init(&condition, NOT_EXISTS_OP, 0, NULL, &left_value, 0, NULL, right_value, CONTEXT->conj[--CONTEXT->conj_num]);

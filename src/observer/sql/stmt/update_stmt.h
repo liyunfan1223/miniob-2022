@@ -14,6 +14,7 @@ See the Mulan PSL v2 for more details. */
 
 #pragma once
 
+#include <vector>
 #include "rc.h"
 #include "sql/stmt/stmt.h"
 #include "storage/common/field_meta.h"
@@ -26,7 +27,8 @@ class UpdateStmt : public Stmt
 public:
 
 
-  UpdateStmt(Table *table, FilterStmt *filter_stmt, Value value, char *field_name);
+  //UpdateStmt(Table *table, FilterStmt *filter_stmt, Value value, char *field_name);
+  UpdateStmt(Table *table, FilterStmt *filter_stmt, std::vector<Value> values, std::vector<const char *> field_names);
 
   ~UpdateStmt() override;
 
@@ -36,17 +38,18 @@ public:
 
   Table *table() const {return table_; }
   FilterStmt *filter_stmt() const {return filter_stmt_; }
-  Value value() const { return value_; }
-  char *field_name() const { return field_name_;}
-
+//  Value value() const { return value_; }
+//  char *field_name() const { return field_name_;}
+  std::vector<Value> values() const { return values_; }
+  std::vector<const char *>field_names() const { return field_names_;}
 public:
   static RC create(Db *db, const Updates &update_sql, Stmt *&stmt);
 
 private:
   Table *table_ = nullptr;
-  char *field_name_ = nullptr;
+  std::vector<const char *> field_names_; //= nullptr;
   FilterStmt *filter_stmt_ = nullptr;
-  Value value_ = {UNDEFINED, nullptr};
+  std::vector<Value> values_; // = {UNDEFINED, nullptr};
 
 };
 

@@ -129,7 +129,8 @@ RC SubqueryPredicateOperator::check_attr_in_group(size_t attr_num, RelAttr * att
   return SUCCESS;
 }
 
-RC SubqueryPredicateOperator::execute_sub_query(std::vector<Tuple *> &parent_tuples, std::vector<const char *> &parent_rels, Selects *selects, TupleCell &ret_cell)
+RC SubqueryPredicateOperator::execute_sub_query(std::vector<Tuple *> &parent_tuples,
+    std::vector<const char *> &parent_rels, Selects *selects, TupleCell &ret_cell, Db * db_)
 {
   RC rc = RC::SUCCESS;
   replace_exists(*selects);
@@ -234,7 +235,7 @@ bool SubqueryPredicateOperator::do_predicate_by_cond(Tuple &tuple)
       if (value.is_sub_select) {
         parent_tuples_.push_back(&tuple);
         parent_rel_.push_back(rel_name_);
-        if (execute_sub_query(parent_tuples_, parent_rel_, value.selects, tc_left) != SUCCESS) {
+        if (execute_sub_query(parent_tuples_, parent_rel_, value.selects, tc_left, db_) != SUCCESS) {
           throw 0;
         }
         parent_tuples_.pop_back();
@@ -269,7 +270,7 @@ bool SubqueryPredicateOperator::do_predicate_by_cond(Tuple &tuple)
       if (value.is_sub_select) {
         parent_tuples_.push_back(&tuple);
         parent_rel_.push_back(rel_name_);
-        if (execute_sub_query(parent_tuples_, parent_rel_, value.selects, tc_right) != SUCCESS) {
+        if (execute_sub_query(parent_tuples_, parent_rel_, value.selects, tc_right, db_) != SUCCESS) {
           throw 0;
         }
         parent_tuples_.pop_back();

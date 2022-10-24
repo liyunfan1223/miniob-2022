@@ -157,8 +157,10 @@ typedef struct {
 // struct of update
 typedef struct {
   char *relation_name;            // Relation to update
-  char *attribute_name;           // Attribute to update
-  Value value;                    // update value
+  char *attribute_name[MAX_NUM];           // Attribute to update
+  size_t attr_num;
+  Value value[MAX_NUM];                    // update value
+  size_t value_num;
   size_t condition_num;           // Length of conditions in Where clause
   Condition conditions[MAX_NUM];  // conditions in Where clause
 } Updates;
@@ -184,9 +186,11 @@ typedef struct {
 
 // struct of create_index
 typedef struct {
-  char *index_name;      // Index name
-  char *relation_name;   // Relation name
-  char *attribute_name;  // Attribute name
+  char * index_name;      // Index name
+  char * relation_name;   // Relation name
+//  char * attribute_name;  // Attribute name
+  char * attribute_name[MAX_NUM];  // Attribute name
+  size_t attr_num;
 } CreateIndex;
 
 // struct of  drop_index
@@ -297,8 +301,9 @@ void deletes_init_relation(Deletes *deletes, const char *relation_name);
 void deletes_set_conditions(Deletes *deletes, Condition conditions[], size_t condition_num);
 void deletes_destroy(Deletes *deletes);
 
-void updates_init(Updates *updates, const char *relation_name, const char *attribute_name, Value *value,
+void updates_init(Updates *updates, const char *relation_name,
     Condition conditions[], size_t condition_num);
+void updates_append_attr_and_value(Updates * updates, const char * attr_name, Value * value);
 void updates_destroy(Updates *updates);
 
 void create_table_append_attribute(CreateTable *create_table, AttrInfo *attr_info);
@@ -310,8 +315,9 @@ void show_index_init(ShowIndex * show_index, const char * relation_name);
 
 void drop_table_destroy(DropTable *drop_table);
 
-void create_index_init(
-    CreateIndex *create_index, const char *index_name, const char *relation_name, const char *attr_name);
+void create_index_init(CreateIndex *create_index, const char *index_name, const char *relation_name, const char *attr_name);
+void create_index_multi_rel_init(CreateIndex *create_index, const char *index_name, const char *relation_name);
+void create_index_append_attr_name(CreateIndex *create_index, const char *attr_name);
 void create_index_destroy(CreateIndex *create_index);
 
 void drop_index_init(DropIndex *drop_index, const char *index_name);

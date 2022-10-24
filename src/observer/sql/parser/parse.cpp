@@ -348,12 +348,12 @@ void deletes_destroy(Deletes *deletes)
   deletes->relation_name = nullptr;
 }
 
-void updates_init(Updates *updates, const char *relation_name, const char *attribute_name, Value *value,
+void updates_init(Updates *updates, const char *relation_name,
     Condition conditions[], size_t condition_num)
 {
   updates->relation_name = strdup(relation_name);
-  updates->attribute_name = strdup(attribute_name);
-  updates->value = *value;
+  // updates->attribute_name = strdup(attribute_name);
+  // updates->value = *value;
 
   assert(condition_num <= sizeof(updates->conditions) / sizeof(updates->conditions[0]));
   for (size_t i = 0; i < condition_num; i++) {
@@ -362,14 +362,25 @@ void updates_init(Updates *updates, const char *relation_name, const char *attri
   updates->condition_num = condition_num;
 }
 
+void updates_append_attr_and_value(Updates * updates, const char * attr_name, Value * value)
+{
+  updates->attribute_name[updates->attr_num++] = strdup(attr_name);
+  updates->value[updates->value_num++] = *value;
+}
+
 void updates_destroy(Updates *updates)
 {
   free(updates->relation_name);
-  free(updates->attribute_name);
+  for (size_t i = 0; i < updates->attr_num; i++) {
+    free(updates->attribute_name[i]);
+    updates->attribute_name[i] = nullptr;
+  }
   updates->relation_name = nullptr;
-  updates->attribute_name = nullptr;
 
-  value_destroy(&updates->value);
+  for (size_t i = 0; i < updates->value_num; i++) {
+    value_destroy(&updates->value[i]);
+  }
+
 
   for (size_t i = 0; i < updates->condition_num; i++) {
     condition_destroy(&updates->conditions[i]);
@@ -418,18 +429,30 @@ void create_index_init(
 {
   create_index->index_name = strdup(index_name);
   create_index->relation_name = strdup(relation_name);
-  create_index->attribute_name = strdup(attr_name);
+  create_index->attribute_name[0] = strdup(attr_name);
+}
+
+void create_index_multi_rel_init(
+    CreateIndex *create_index, const char *index_name, const char *relation_name)
+{
+  create_index->index_name = strdup(index_name);
+  create_index->relation_name = strdup(relation_name);
+}
+
+void create_index_append_attr_name(CreateIndex *create_index, const char *attr_name)
+{
+  create_index->attribute_name[create_index->attr_num++] = strdup(attr_name);
 }
 
 void create_index_destroy(CreateIndex *create_index)
 {
   free(create_index->index_name);
   free(create_index->relation_name);
-  free(create_index->attribute_name);
+  free(create_index->attribute_name[0]);
 
   create_index->index_name = nullptr;
   create_index->relation_name = nullptr;
-  create_index->attribute_name = nullptr;
+  create_index->attribute_name[0] = nullptr;
 }
 
 void drop_index_init(DropIndex *drop_index, const char *index_name)

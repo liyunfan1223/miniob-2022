@@ -188,6 +188,21 @@ const IndexMeta *TableMeta::index(int i) const
   return &indexes_[i];
 }
 
+int TableMeta::find_field_index_by_name(const char *name) const
+{
+  if (nullptr == name) {
+    return -1;
+  }
+  int ret = 0;
+  for (const FieldMeta &field : fields_) {
+    if (0 == strcmp(field.name(), name)) {
+      return ret;
+    }
+    ret++;
+  }
+  return -1;
+}
+
 int TableMeta::index_num() const
 {
   return indexes_.size();

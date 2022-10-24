@@ -16,6 +16,7 @@ See the Mulan PSL v2 for more details. */
 #define __OBSERVER_STORAGE_COMMON_TABLE_H__
 
 #include "storage/common/table_meta.h"
+#include "storage/common/db.h"
 
 struct RID;
 class Record;
@@ -60,7 +61,7 @@ public:
 
   RC insert_record(Trx *trx, int value_num, const Value *values,Record & record);//change
   RC update_record(Trx *trx, const char *attribute_name, const Value value, int condition_num,
-      const Condition conditions[], int *updated_count);
+      const Condition conditions[], int *updated_count, Db * db);
   RC delete_record(Trx *trx, ConditionFilter *filter, int *deleted_count);
   RC delete_record(Trx *trx, Record *record);
   RC recover_delete_record(Record *record);
@@ -68,7 +69,7 @@ public:
   RC scan_record(Trx *trx, ConditionFilter *filter, int limit, void *context,
       void (*record_reader)(const char *data, void *context));
 
-  RC create_index(Trx *trx, const char *index_name, const char *attribute_name);
+  RC create_index(Trx *trx, const char *index_name, char ** attribute_name, size_t attr_num);
 
   RC get_record_scanner(RecordFileScanner &scanner);
 
@@ -77,7 +78,8 @@ public:
     return record_handler_;
   }
 
-  RC update_record(Trx *trx, Record *record, const FieldMeta *field_meta, const Value value);
+  RC update_record(Trx *trx, Record *record, std::vector<const FieldMeta *>field_meta,
+      std::vector<Value> value, std::vector<int> field_idx, Db * db);
 
 public:
   const char *name() const;

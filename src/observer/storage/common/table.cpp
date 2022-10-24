@@ -29,6 +29,7 @@ See the Mulan PSL v2 for more details. */
 #include "storage/index/bplus_tree_index.h"
 #include "storage/trx/trx.h"
 #include "storage/clog/clog.h"
+#include "sql/operator/subquery_predicate_operator.h"
 
 Table::~Table()
 {
@@ -641,21 +642,21 @@ static RC insert_index_record_reader_adapter(Record *record, void *context)
   return inserter.insert_index(record);
 }
 
-RC Table::create_index(Trx *trx, const char *index_name, const char *attribute_name)
+RC Table::create_index(Trx *trx, const char *index_name, char ** attribute_name, size_t attr_num)
 {
-  if (common::is_blank(index_name) || common::is_blank(attribute_name)) {
+  if (common::is_blank(index_name) || common::is_blank(attribute_name[0])) {
     LOG_INFO("Invalid input arguments, table name is %s, index_name is blank or attribute_name is blank", name());
     return RC::INVALID_ARGUMENT;
   }
-  if (table_meta_.index(index_name) != nullptr || table_meta_.find_index_by_field((attribute_name))) {
+  if (table_meta_.index(index_name) != nullptr || table_meta_.find_index_by_field((attribute_name[0]))) {
     LOG_INFO("Invalid input arguments, table name is %s, index %s exist or attribute %s exist index",
-             name(), index_name, attribute_name);
+             name(), index_name, attribute_name[0]);
     return RC::SCHEMA_INDEX_EXIST;
   }
 
-  const FieldMeta *field_meta = table_meta_.field(attribute_name);
+  const FieldMeta *field_meta = table_meta_.field(attribute_name[0]);
   if (!field_meta) {
-    LOG_INFO("Invalid input arguments, there is no field of %s in table:%s.", attribute_name, name());
+    LOG_INFO("Invalid input arguments, there is no field of %s in table:%s.", attribute_name[0], name());
     return RC::SCHEMA_FIELD_MISSING;
   }
 
@@ -663,7 +664,7 @@ RC Table::create_index(Trx *trx, const char *index_name, const char *attribute_n
   RC rc = new_index_meta.init(index_name, *field_meta);
   if (rc != RC::SUCCESS) {
     LOG_INFO("Failed to init IndexMeta in table:%s, index_name:%s, field_name:%s",
-             name(), index_name, attribute_name);
+             name(), index_name, attribute_name[0]);
     return rc;
   }
 
@@ -735,11 +736,11 @@ public:
   }
 
   RC update_record(Record *record) {
-    RC rc = table_.update_record(trx_, record, field_meta_ ,value_);
-    if(rc!=RC::SUCCESS){
-      return rc;
-    }
-    ++updated_count_;
+//    RC rc = table_.update_record(trx_, record, field_meta_ ,value_, 2);
+//    if(rc!=RC::SUCCESS){
+//      return rc;
+//    }
+//    ++updated_count_;
     return RC::SUCCESS;
   }
 
@@ -763,37 +764,79 @@ inline int Min(int x,int y){
   if (x < y)return x;
   return y;
 }
-RC Table::update_record(Trx *trx, Record *record, const FieldMeta *field_meta, const Value value) {
+RC Table::update_record(Trx *trx, Record *record, std::vector<const FieldMeta *>field_metas,
+    std::vector<Value> values, std::vector<int> field_idxs, Db * db) {
   RC rc = RC::SUCCESS;
   Record New_record = *record;
 
-  switch (value.type) {
-    // case DATES:
-    case INTS: {
-      int v = *(int*)(value.data);
-      memcpy(New_record.data() + field_meta->offset(), &v, field_meta->len());
-    }
-    break;
-    case FLOATS: {
-      float v = *(float*)(value.data);
-      memcpy(New_record.data() + field_meta->offset(), &v, field_meta->len());
-    }
-    break;
-    case CHARS: {
-      char *s = (char*)(value.data);
-      memcpy(New_record.data() + field_meta->offset(), s, field_meta->len());
-    }
-    break;
-    case DATES: {
-      int v = *(int*)(value.data);
-      memcpy(New_record.data() + field_meta->offset(), &v, field_meta->len());
-    }
-    break;
-    default: {
-      LOG_PANIC("Unsupported field type. type=%d", field_meta->type());
+  for (size_t i = 0; i < values.size(); i++) {
+    Value & value = values[i];
+    const FieldMeta * field_meta = field_metas[i];
+    int & field_idx = field_idxs[i];
+    if (value.is_sub_select) {
+      std::vector<Tuple *> r_tuples;
+      std::vector<const char *> r_rels;
+      TupleCell ret_cell;
+      SubqueryPredicateOperator::execute_sub_query(r_tuples, r_rels, value.selects, ret_cell, db);
+      switch (ret_cell.attr_type()) {
+        case INTS: {
+          int v = *(int *)(ret_cell.data());
+          memcpy(New_record.data() + field_meta->offset(), &v, field_meta->len());
+        } break;
+        case FLOATS: {
+          float v = *(float *)(ret_cell.data());
+          memcpy(New_record.data() + field_meta->offset(), &v, field_meta->len());
+        } break;
+        case CHARS: {
+          char *s = (char *)(ret_cell.data());
+          memcpy(New_record.data() + field_meta->offset(), s, field_meta->len());
+        } break;
+        case DATES: {
+          int v = *(int *)(ret_cell.data());
+          memcpy(New_record.data() + field_meta->offset(), &v, field_meta->len());
+        } break;
+        case NULL_T: {
+          int null_mask;
+          memcpy(&null_mask, New_record.data() + TableMeta::null_field_offset, sizeof(int32_t));
+          null_mask |= 1u << (field_idx - TableMeta::system_field_num);
+          memcpy(New_record.data() + TableMeta::null_field_offset, &null_mask, sizeof(int32_t));
+        } break;
+        default: {
+          LOG_PANIC("Unsupported field type. type=%d", field_meta->type());
+        }
+      }
+
+    } else {
+      switch (value.type) {
+        // case DATES:
+        case INTS: {
+          int v = *(int *)(value.data);
+          memcpy(New_record.data() + field_meta->offset(), &v, field_meta->len());
+        } break;
+        case FLOATS: {
+          float v = *(float *)(value.data);
+          memcpy(New_record.data() + field_meta->offset(), &v, field_meta->len());
+        } break;
+        case CHARS: {
+          char *s = (char *)(value.data);
+          memcpy(New_record.data() + field_meta->offset(), s, field_meta->len());
+        } break;
+        case DATES: {
+          int v = *(int *)(value.data);
+          memcpy(New_record.data() + field_meta->offset(), &v, field_meta->len());
+        } break;
+        case NULL_T: {
+          int null_mask;
+          memcpy(&null_mask, New_record.data() + TableMeta::null_field_offset, sizeof(int32_t));
+          null_mask |= 1u << (field_idx - TableMeta::system_field_num);
+          memcpy(New_record.data() + TableMeta::null_field_offset, &null_mask, sizeof(int32_t));
+        } break;
+        default: {
+          LOG_PANIC("Unsupported field type. type=%d", field_meta->type());
+        }
+      }
     }
   }
-
   LOG_INFO("New record = %p", New_record.data());
 
   rc = record_handler_->update_record(&New_record);
@@ -817,7 +860,7 @@ RC Table::update_record(Trx *trx, Record *record, const FieldMeta *field_meta, c
 }
 
 RC Table::update_record(Trx *trx, const char *attribute_name, const Value value, int condition_num,
-    const Condition conditions[], int *updated_count)
+    const Condition conditions[], int *updated_count, Db * db)
 {
 
     CompositeConditionFilter condition_filter;

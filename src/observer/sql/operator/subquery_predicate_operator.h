@@ -42,14 +42,16 @@ public:
   Tuple * current_tuple() override;
   //int tuple_cell_num() const override;
   //RC tuple_cell_spec_at(int index, TupleCellSpec &spec) const override;
+  static RC execute_sub_query(std::vector<Tuple *> & parent_tuples,
+      std::vector<const char *> & parent_rels, Selects * selects, TupleCell & ret_cell, Db * db_);
+  static RC add_projection(Db * db, std::vector<Table *> & tables, size_t attr_num, RelAttr * attributes, ProjectOperator *oper);
+  static RC check_attr_in_group(size_t attr_num, RelAttr * attrs, size_t group_num, GroupAttr * groups);
+  static RC replace_exists(Selects & selects);
 private:
-  RC replace_exists(Selects & selects);
-  RC add_projection(Db * db, std::vector<Table *> & tables, size_t attr_num, RelAttr * attributes, ProjectOperator *oper);
-  RC check_attr_in_group(size_t attr_num, RelAttr * attrs, size_t group_num, GroupAttr * groups);
   bool do_predicate(Tuple &tuple);
   bool do_predicate_by_cond(Tuple &tuple);
   // 遇到子查询 调用该函数 返回 ret_cell
-  RC execute_sub_query(std::vector<Tuple *> & parent_tuples, std::vector<const char *> & parent_rels, Selects * selects, TupleCell & ret_cell);
+  // RC execute_sub_query(std::vector<Tuple *> & parent_tuples, std::vector<const char *> & parent_rels, Selects * selects, TupleCell & ret_cell);
 private:
   Condition * conditions_;
   size_t condition_num_;
