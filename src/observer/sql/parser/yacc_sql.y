@@ -260,12 +260,17 @@ create_index:		/*create index 语句的语法解析树*/
     ;
 index_col_ID_list:
     /* empty */
-    | ID index_col_ID_list {
-	create_index_append_attr_name(&CONTEXT->ssql->sstr.create_index, $1);
+    | index_col_ID index_col_ID_list {
+
     }
-    | COMMA ID index_col_ID_list {
-	create_index_append_attr_name(&CONTEXT->ssql->sstr.create_index, $2);
+    | COMMA index_col_ID index_col_ID_list {
     }
+    ;
+index_col_ID:
+    ID {
+    	create_index_append_attr_name(&CONTEXT->ssql->sstr.create_index, $1);
+    }
+    ;
 
 drop_index:			/*drop index 语句的语法解析树*/
     DROP INDEX ID  SEMICOLON 

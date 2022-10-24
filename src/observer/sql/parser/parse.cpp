@@ -360,6 +360,7 @@ void updates_init(Updates *updates, const char *relation_name,
     updates->conditions[i] = conditions[i];
   }
   updates->condition_num = condition_num;
+
 }
 
 void updates_append_attr_and_value(Updates * updates, const char * attr_name, Value * value)
