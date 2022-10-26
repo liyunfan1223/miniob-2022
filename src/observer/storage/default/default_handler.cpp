@@ -211,7 +211,7 @@ RC DefaultHandler::update_record(Trx *trx, const char *dbname, const char *relat
     return RC::SCHEMA_TABLE_NOT_EXIST;
   }
 
-  const Value value1 = *value;
+//  const Value value1 = *value;
   return SUCCESS;
 //  return table->update_record(trx, attribute_name, value1, condition_num, conditions, updated_count);
 }

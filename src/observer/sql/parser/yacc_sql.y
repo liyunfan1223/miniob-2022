@@ -609,15 +609,17 @@ update:			/*  update 语句的语法解析树*/
 
 update_set_list:
     /* empty */
-    | ID EQ value update_set_list {
-	Value *value = &CONTEXT->values[--CONTEXT->value_length];
-	updates_append_attr_and_value(&CONTEXT->ssql->sstr.update, $1, value);
+    | update_set update_set_list {
     }
-    | COMMA ID EQ value update_set_list {
-	Value *value = &CONTEXT->values[--CONTEXT->value_length];
-	updates_append_attr_and_value(&CONTEXT->ssql->sstr.update, $2, value);
+    | COMMA update_set update_set_list {
     }
     ;
+
+update_set:
+    ID EQ value {
+        Value *value = &CONTEXT->values[--CONTEXT->value_length];
+    	updates_append_attr_and_value(&CONTEXT->ssql->sstr.update, $1, value);
+    };
 
 select:				/*  select 语句的语法解析树*/
     SELECT attr_list FROM ID inner_join_list rel_list where group order SEMICOLON
@@ -892,7 +894,7 @@ having_condition:
     }
     | ID DOT ID comOp value {
         RelAttr left_attr;
-        relation_attr_aggr_init(&left_attr, $1, $3);
+        relation_attr_init(&left_attr, $1, $3);
         Value *right_value = &CONTEXT->values[CONTEXT->value_length - 1];
         Condition condition;
         condition_init(&condition, CONTEXT->comps[--CONTEXT->comp_num], 1, &left_attr, NULL, 0, NULL, right_value);

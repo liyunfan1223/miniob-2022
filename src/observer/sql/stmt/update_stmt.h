@@ -47,9 +47,9 @@ public:
 
 private:
   Table *table_ = nullptr;
-  std::vector<const char *> field_names_; //= nullptr;
   FilterStmt *filter_stmt_ = nullptr;
   std::vector<Value> values_; // = {UNDEFINED, nullptr};
+  std::vector<const char *> field_names_; //= nullptr;
 
 };
 

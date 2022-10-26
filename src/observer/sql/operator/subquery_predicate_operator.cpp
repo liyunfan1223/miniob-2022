@@ -100,6 +100,9 @@ RC SubqueryPredicateOperator::add_projection(Db * db, std::vector<Table *> & tab
         }
       } else {
         // select id.id
+        if (table->table_meta().field(attr.attribute_name) == nullptr) {
+          return RC::GENERIC_ERROR;
+        }
         oper->add_projection(table, table->table_meta().field(attr.attribute_name), attr.aggType);
       }
     }
@@ -138,6 +141,10 @@ RC SubqueryPredicateOperator::execute_sub_query(std::vector<Tuple *> &parent_tup
   std::vector<TableScanOperator *> scan_opers;
   std::vector<Table *> tables;
   for (size_t i = 0; i < selects->relation_num; i++) {
+    Table * t_db = db_->find_table(selects->relations[i]);
+    if (t_db == nullptr) {
+      return RC::SCHEMA_TABLE_NOT_EXIST;
+    }
     tables.push_back(db_->find_table(selects->relations[i]));
   }
   for (auto table : tables) {

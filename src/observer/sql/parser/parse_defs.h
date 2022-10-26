@@ -260,7 +260,11 @@ extern "C" {
 #endif  // __cplusplus
 
 void relation_attr_init(RelAttr *relation_attr, const char *relation_name, const char *attribute_name);
+void relation_attr_aggr_init(
+    RelAttr *relation_attr, const char *relation_name, const char *attribute_name, AggType aggrType);
 void relation_attr_destroy(RelAttr *relation_attr);
+void group_attr_init(GroupAttr *group_attr, const char *relation_name, const char *attribute_name);
+void order_attr_init(OrderAttr *order_attr, const char *relation_name, const char *attribute_name, OrderType orderType);
 
 void value_init_integer(Value *value, int v);
 void value_init_float(Value *value, float v);
@@ -292,6 +296,7 @@ void selects_append_having_condition(Selects *selects, Condition * condition);
 void selects_destroy(Selects *selects);
 
 void group_append_attribute(Selects *selects, GroupAttr *group_attr);
+void order_append_attribute(Selects *selects, OrderAttr *order_attr);
 
 void inserts_init(Inserts *inserts, const char *relation_name, InsertRecord records[], size_t record_num);
 void insert_record_init(InsertRecord *records, Value values[], size_t value_num);

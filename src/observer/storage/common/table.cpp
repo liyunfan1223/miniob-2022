@@ -15,6 +15,7 @@ See the Mulan PSL v2 for more details. */
 #include <limits.h>
 #include <string.h>
 #include <algorithm>
+#include <cmath>
 
 #include "common/defs.h"
 #include "storage/common/table.h"
@@ -777,17 +778,46 @@ RC Table::update_record(Trx *trx, Record *record, std::vector<const FieldMeta *>
       std::vector<Tuple *> r_tuples;
       std::vector<const char *> r_rels;
       TupleCell ret_cell;
-      SubqueryPredicateOperator::execute_sub_query(r_tuples, r_rels, value.selects, ret_cell, db);
+      if (SubqueryPredicateOperator::execute_sub_query(r_tuples, r_rels, value.selects, ret_cell, db) != SUCCESS) {
+        return RC::GENERIC_ERROR;
+      }
+      if (ret_cell.is_set) {
+        if (ret_cell.set_cells.size() == 0) {
+          continue;
+        }
+        return RC::GENERIC_ERROR;
+      }
       switch (ret_cell.attr_type()) {
         case INTS: {
-          int v = *(int *)(ret_cell.data());
-          memcpy(New_record.data() + field_meta->offset(), &v, field_meta->len());
+          if (field_meta->type() == INTS) {
+            int v = *(int *)(ret_cell.data());
+            memcpy(New_record.data() + field_meta->offset(), &v, field_meta->len());
+          } else if (field_meta->type() == FLOATS) {
+            float v = *(int *)(ret_cell.data());
+            memcpy(New_record.data() + field_meta->offset(), &v, field_meta->len());
+          } else if (field_meta->type() == CHARS) {
+            sprintf((char *)New_record.data() + field_meta->offset(),"%d",abs(*(int *)ret_cell.data()));
+          } else {
+            return RC::GENERIC_ERROR;
+          }
         } break;
         case FLOATS: {
-          float v = *(float *)(ret_cell.data());
-          memcpy(New_record.data() + field_meta->offset(), &v, field_meta->len());
+          if (field_meta->type() == INTS) {
+            int v = *(float *)(ret_cell.data());
+            memcpy(New_record.data() + field_meta->offset(), &v, field_meta->len());
+          } else if (field_meta->type() == FLOATS) {
+            float v = *(float *)(ret_cell.data());
+            memcpy(New_record.data() + field_meta->offset(), &v, field_meta->len());
+          } else if (field_meta->type() == CHARS) {
+            sprintf((char *)New_record.data() + field_meta->offset(),"%g",fabs(*(float *)ret_cell.data()));
+          } else {
+            return RC::GENERIC_ERROR;
+          }
         } break;
         case CHARS: {
+          if (field_meta->type() != CHARS) {
+            return RC::GENERIC_ERROR;
+          }
           char *s = (char *)(ret_cell.data());
           memcpy(New_record.data() + field_meta->offset(), s, field_meta->len());
         } break;
@@ -796,6 +826,10 @@ RC Table::update_record(Trx *trx, Record *record, std::vector<const FieldMeta *>
           memcpy(New_record.data() + field_meta->offset(), &v, field_meta->len());
         } break;
         case NULL_T: {
+          if (!field_meta->nullable()) {
+            LOG_WARN("Field is not nullable.");
+            throw 0;
+          }
           int null_mask;
           memcpy(&null_mask, New_record.data() + TableMeta::null_field_offset, sizeof(int32_t));
           null_mask |= 1u << (field_idx - TableMeta::system_field_num);
@@ -810,14 +844,35 @@ RC Table::update_record(Trx *trx, Record *record, std::vector<const FieldMeta *>
       switch (value.type) {
         // case DATES:
         case INTS: {
-          int v = *(int *)(value.data);
-          memcpy(New_record.data() + field_meta->offset(), &v, field_meta->len());
+          if (field_meta->type() == INTS) {
+            int v = *(int *)(value.data);
+            memcpy(New_record.data() + field_meta->offset(), &v, field_meta->len());
+          } else if (field_meta->type() == FLOATS) {
+            float v = *(int *)(value.data);
+            memcpy(New_record.data() + field_meta->offset(), &v, field_meta->len());
+          } else if (field_meta->type() == CHARS) {
+            sprintf((char *)New_record.data() + field_meta->offset(),"%d",abs(*(int *)value.data));
+          } else {
+            return RC::GENERIC_ERROR;
+          }
         } break;
         case FLOATS: {
-          float v = *(float *)(value.data);
-          memcpy(New_record.data() + field_meta->offset(), &v, field_meta->len());
+          if (field_meta->type() == INTS) {
+            int v = *(float *)(value.data);
+            memcpy(New_record.data() + field_meta->offset(), &v, field_meta->len());
+          } else if (field_meta->type() == FLOATS) {
+            float v = *(float *)(value.data);
+            memcpy(New_record.data() + field_meta->offset(), &v, field_meta->len());
+          } else if (field_meta->type() == CHARS) {
+            sprintf((char *)New_record.data() + field_meta->offset(),"%g",fabs(*(float *)value.data));
+          } else {
+            return RC::GENERIC_ERROR;
+          }
         } break;
         case CHARS: {
+          if (field_meta->type() != CHARS) {
+            return RC::GENERIC_ERROR;
+          }
           char *s = (char *)(value.data);
           memcpy(New_record.data() + field_meta->offset(), s, field_meta->len());
         } break;
@@ -826,6 +881,10 @@ RC Table::update_record(Trx *trx, Record *record, std::vector<const FieldMeta *>
           memcpy(New_record.data() + field_meta->offset(), &v, field_meta->len());
         } break;
         case NULL_T: {
+          if (!field_meta->nullable()) {
+            LOG_WARN("Field is not nullable.");
+            throw 0;
+          }
           int null_mask;
           memcpy(&null_mask, New_record.data() + TableMeta::null_field_offset, sizeof(int32_t));
           null_mask |= 1u << (field_idx - TableMeta::system_field_num);

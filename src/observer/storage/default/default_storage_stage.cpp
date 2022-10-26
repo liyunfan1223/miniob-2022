@@ -152,7 +152,7 @@ void DefaultStorageStage::handle_event(StageEvent *event)
   Db *db = session->get_current_db();
   const char *dbname = db->name();
 
-  Trx *current_trx = session->current_trx();
+//  Trx *current_trx = session->current_trx();
 
   RC rc = RC::SUCCESS;
 

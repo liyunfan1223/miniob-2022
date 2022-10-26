@@ -153,7 +153,13 @@ void ExecuteStage::handle_request(common::StageEvent *event)
       do_insert(sql_event);
     } break;
     case StmtType::UPDATE: {
-      do_update(sql_event);
+      try {
+        do_update(sql_event);
+      } catch (...) {
+        const char *response = "FAILURE\n";
+        session_event->set_response(response);
+      }
+
     } break;
     case StmtType::DELETE: {
       do_delete(sql_event);
@@ -505,6 +511,9 @@ RC add_projection(Db * db, std::vector<Table *> & tables, size_t attr_num, RelAt
         }
       } else {
         // select id.id
+        if (table->table_meta().field(attr.attribute_name) == nullptr) {
+          return RC::GENERIC_ERROR;
+        }
         oper->add_projection(table, table->table_meta().field(attr.attribute_name), attr.aggType);
       }
     }
@@ -566,6 +575,10 @@ RC ExecuteStage::do_select(SQLStageEvent *sql_event)
 
   std::vector<Table *> tables;
   for (size_t i = 0; i < selects.relation_num; i++) {
+    Table * t_db = db->find_table(selects.relations[i]);
+    if (t_db == nullptr) {
+      return RC::SCHEMA_TABLE_NOT_EXIST;
+    }
     tables.push_back(db->find_table(selects.relations[i]));
   }
   for (auto table : tables) {

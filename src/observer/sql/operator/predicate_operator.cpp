@@ -163,7 +163,7 @@ bool PredicateOperator::do_predicate_by_cond(Tuple &tuple)
     // 对 in 和 not in 特殊处理
     if (!cond.right_is_attr && cond.right_value.is_set) {
         bool in = false;
-        for (size_t i = 0; i < cond.right_value.set_length; i++) {
+        for (size_t i = 0; i < (size_t)cond.right_value.set_length; i++) {
           auto val = cond.right_value.set_values[i];
           TupleCell tmp_cell;
           tmp_cell.set_type(val.type);

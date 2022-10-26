@@ -249,7 +249,7 @@ RC Db::recover()
         break;
       }
       
-      if (max_trx_id < clog_record->get_trx_id()) {
+      if ((int)max_trx_id < clog_record->get_trx_id()) {
         max_trx_id = clog_record->get_trx_id();
       }
       delete clog_record;
