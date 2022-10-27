@@ -43,7 +43,7 @@ struct CLogBlockHeader;
 struct CLogBlock;
 struct CLogMTRManager;
 
-enum CLogType { REDO_ERROR = 0, REDO_MTR_BEGIN, REDO_MTR_COMMIT, REDO_INSERT, REDO_DELETE };
+enum CLogType { REDO_ERROR = 0, REDO_MTR_BEGIN, REDO_MTR_COMMIT, REDO_INSERT, REDO_UPDATE, REDO_DELETE };
 
 struct CLogRecordHeader {
   int32_t lsn_;
@@ -71,6 +71,21 @@ struct CLogInsertRecord {
   }
 };
 
+struct CLogUpdateRecord {
+  CLogRecordHeader hdr_;
+  char table_name_[TABLE_NAME_MAX_LEN];
+  RID rid_;
+  int data_len_;
+  char *data_;
+
+  bool operator==(const CLogInsertRecord &other) const
+  {
+    return hdr_ == other.hdr_ && (strcmp(table_name_, other.table_name_) == 0) && (rid_ == other.rid_) &&
+           (data_len_ == other.data_len_) && (memcmp(data_, other.data_, data_len_) == 0);
+  }
+};
+
+
 struct CLogDeleteRecord {
   CLogRecordHeader hdr_;
   char table_name_[TABLE_NAME_MAX_LEN];
@@ -93,6 +108,7 @@ struct CLogMTRRecord {
 
 union CLogRecords {
   CLogInsertRecord ins;
+  CLogUpdateRecord upd;
   CLogDeleteRecord del;
   CLogMTRRecord mtr;
   char *errors;

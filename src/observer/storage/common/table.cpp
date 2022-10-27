@@ -904,8 +904,41 @@ RC Table::update_record(Trx *trx, Record *record, std::vector<const FieldMeta *>
     return rc;
   }
 
+
+//   TODO update的 clog 调用
+//  if (trx != nullptr) {
+//    // append clog record
+//    CLogRecord *clog_record = nullptr;
+//    rc = clog_manager_->clog_gen_record(CLogType::REDO_INSERT, trx->get_current_id(), clog_record, name(), table_meta_.record_size(), record);
+//    if (rc != RC::SUCCESS) {
+//      LOG_ERROR("Failed to create a clog record. rc=%d:%s", rc, strrc(rc));
+//      return rc;
+//    }
+//    rc = clog_manager_->clog_append_record(clog_record);
+//    if (rc != RC::SUCCESS) {
+//      return rc;
+//    }
+//  }
+//  return rc;
+
   if (trx != nullptr) {
+    // 问题好像在这里 总之跑不出这个if应该
     rc = trx->update_record(this, record);
+    if (rc != RC::SUCCESS) {
+      LOG_ERROR("update record error. code: is %d:%s", rc, strrc(rc));
+    }
+    CLogRecord *clog_record = nullptr;
+    // ?
+    rc = clog_manager_->clog_gen_record(CLogType::REDO_UPDATE, trx->get_current_id(), clog_record, name(), table_meta_.record_size(), record);
+    if (rc != RC::SUCCESS) {
+      LOG_ERROR("Failed to create a clog record. rc=%d:%s", rc, strrc(rc));
+    }
+    rc = clog_manager_->clog_append_record(clog_record);
+    if (rc != RC::SUCCESS) {
+      return rc;
+    }
+
+
   } else {
     // rc = delete_entry_of_indexes(record->data(), record->rid(), false);
     rc = RC::SUCCESS;
@@ -913,6 +946,16 @@ RC Table::update_record(Trx *trx, Record *record, std::vector<const FieldMeta *>
     if (rc != RC::SUCCESS) {
       LOG_ERROR("Failed to delete indexes of record (rid=%d.%d). rc=%d:%s",
           record->rid().page_num, record->rid().slot_num, rc, strrc(rc));
+    }
+
+    CLogRecord *clog_record = nullptr;
+    rc = clog_manager_->clog_gen_record(CLogType::REDO_UPDATE, trx->get_current_id(), clog_record, name(), table_meta_.record_size(), record);
+    if (rc != RC::SUCCESS) {
+      LOG_ERROR("Failed to create a clog record. rc=%d:%s", rc, strrc(rc));
+    }
+    rc = clog_manager_->clog_append_record(clog_record);
+    if (rc != RC::SUCCESS) {
+      return rc;
     }
   }
   return rc;
@@ -971,6 +1014,7 @@ RC Table::update_record(Trx *trx, const char *attribute_name, const Value value,
         return rc;
       }
     }
+
 
     return rc;
 }

@@ -422,7 +422,7 @@ RC RecordFileHandler::recover_insert_record(const char *data, int record_size, R
 
 RC RecordFileHandler::update_record(const Record *rec)
 {
-  RC ret;
+  RC ret = RC::SUCCESS;
   RecordPageHandler page_handler;
   if ((ret = page_handler.init(*disk_buffer_pool_, rec->rid().page_num)) != RC::SUCCESS) {
     LOG_ERROR("Failed to init record page handler.page number=%d", rec->rid().page_num);

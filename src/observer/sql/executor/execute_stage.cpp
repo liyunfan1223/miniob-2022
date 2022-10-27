@@ -813,6 +813,13 @@ RC ExecuteStage::do_update(SQLStageEvent * sql_event) //UpdateStmt *stmt, Sessio
   UpdateStmt *stmt = (UpdateStmt *)sql_event->stmt();
   SessionEvent *session_event = sql_event->session_event();
 
+//  Stmt *stmt = sql_event->stmt();
+//  SessionEvent *session_event = sql_event->session_event();
+  Session *session = session_event->session();
+  Db *db = session->get_current_db();
+  Trx *trx = session->current_trx();
+  CLogManager *clog_manager = db->get_clog_manager();
+
   if (stmt == nullptr) {
     LOG_WARN("cannot find statement");
     return RC::GENERIC_ERROR;
@@ -832,7 +839,6 @@ RC ExecuteStage::do_update(SQLStageEvent * sql_event) //UpdateStmt *stmt, Sessio
   }
 
   TableScanOperator scan_oper(update_stmt->table());
-  Db *db = session_event->session()->get_current_db();
 
   SubqueryPredicateOperator spred_oper(updates.conditions, updates.condition_num, updates.relation_name, db);
 
@@ -868,7 +874,7 @@ RC ExecuteStage::do_update(SQLStageEvent * sql_event) //UpdateStmt *stmt, Sessio
 
     RowTuple *row_tuple = static_cast<RowTuple *>(tuple);
     Record &record = row_tuple->record();
-    rc = table->update_record(nullptr, &record,fields, update_stmt->values(), field_idxs, db);
+    rc = table->update_record(trx, &record,fields, update_stmt->values(), field_idxs, db);
     if (rc != RC::SUCCESS) {
       LOG_WARN("failed to delete record: %s", strrc(rc));
       session_event->set_response("FAILURE\n");
@@ -876,8 +882,32 @@ RC ExecuteStage::do_update(SQLStageEvent * sql_event) //UpdateStmt *stmt, Sessio
     }
   }
 
-  session_event->set_response("SUCCESS\n");
-  return RC::SUCCESS;
+  // end
+  rc = RC::SUCCESS;
+  if (rc != RC::SUCCESS) {
+    session_event->set_response("FAILURE\n");
+  } else {
+    session_event->set_response("SUCCESS\n");
+    if (!session->is_trx_multi_operation_mode()) {
+      CLogRecord *clog_record = nullptr;
+      rc = clog_manager->clog_gen_record(CLogType::REDO_MTR_COMMIT, trx->get_current_id(), clog_record);
+      if (rc != RC::SUCCESS || clog_record == nullptr) {
+        session_event->set_response("FAILURE\n");
+        return rc;
+      }
+
+      rc = clog_manager->clog_append_record(clog_record);
+      if (rc != RC::SUCCESS) {
+        session_event->set_response("FAILURE\n");
+        return rc;
+      }
+
+      trx->next_current_id();
+      session_event->set_response("SUCCESS\n");
+    }
+  }
+
+  return rc;
 }
 
 RC ExecuteStage::do_delete(SQLStageEvent *sql_event)

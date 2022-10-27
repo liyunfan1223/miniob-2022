@@ -98,10 +98,10 @@ RC Trx::update_record(Table *table, Record *record)
 {
   RC rc = RC::SUCCESS;
   // 先校验是否以前是否存在过(应该不会存在)
-  Operation *old_oper = find_operation(table, record->rid());
-  if (old_oper != nullptr) {
-    return RC::GENERIC_ERROR;  // error code
-  }
+//  Operation *old_oper = find_operation(table, record->rid());
+//  if (old_oper != nullptr) {
+//    return RC::GENERIC_ERROR;  // error code
+//  }
 
   start_if_not_started();
 

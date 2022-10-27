@@ -203,7 +203,7 @@ RC Db::recover()
     CLogMTRManager *mtr_manager = clog_manager_->get_mtr_manager();
     for (auto it = mtr_manager->log_redo_list.begin(); it != mtr_manager->log_redo_list.end(); it++) {
       CLogRecord *clog_record = *it;
-      if (clog_record->get_log_type() != CLogType::REDO_INSERT && clog_record->get_log_type() != CLogType::REDO_DELETE) {
+      if (clog_record->get_log_type() != CLogType::REDO_INSERT && clog_record->get_log_type()!= REDO_UPDATE && clog_record->get_log_type() != CLogType::REDO_DELETE) {
         delete clog_record;
         continue;
       }
@@ -234,6 +234,18 @@ RC Db::recover()
           rc = table->recover_insert_record(&record);
           delete[] record_data;
         } break;
+
+        case CLogType::REDO_UPDATE: {
+          rc = RC::SUCCESS;
+          char *record_data = new char[clog_record->log_record_.upd.data_len_];
+          memcpy(record_data, clog_record->log_record_.upd.data_, clog_record->log_record_.upd.data_len_);
+          Record record;
+          record.set_data(record_data);
+          record.set_rid(clog_record->log_record_.upd.rid_);
+
+          rc = table->recover_insert_record(&record);
+          delete[] record_data;
+        } break ;
         case CLogType::REDO_DELETE: {
           Record record;
           record.set_rid(clog_record->log_record_.del.rid_);
