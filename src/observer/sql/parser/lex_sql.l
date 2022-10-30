@@ -93,6 +93,9 @@ QUOTE            [\'\"]
 [Ee][Xx][Ii][Ss][Tt][Ss]                             RETURN_TOKEN(EXISTS);
 [Ii][Ss]                                             RETURN_TOKEN(IS);
 [Oo][Rr]                                             RETURN_TOKEN(OR);
+
+
+
 {ID}                                                 yylval->string=strdup(yytext); RETURN_TOKEN(ID);
 "("                                                  RETURN_TOKEN(LBRACE);
 ")"                                                  RETURN_TOKEN(RBRACE);
@@ -109,6 +112,9 @@ QUOTE            [\'\"]
 
 {QUOTE}[0-9]{4}\-(0?[1-9]|1[012])\-(0?[1-9]|[12][0-9]|3[01]){QUOTE} yylval->string=strdup(yytext); RETURN_TOKEN(DATE_STR);
 {QUOTE}[\42\47A-Za-z0-9_/\.\-\%]*{QUOTE}            yylval->string=strdup(yytext); RETURN_TOKEN(SSS);
+
+
+([\-]?[(AVG)|(MAX)|(MIN)|(SUM)|(COUNT)]?[\+\-\*\/\(\)A-Za-z0-9\._]+[\+\-\*/]+[A-Za-z0-9\._]+[\(\)A-Za-z0-9\.\+\-\*/_]*)|(\-+[(AVG)|(MAX)|(MIN)|(SUM)|(COUNT)]?[\(\)A-Za-z0-9\._]+) yylval->string=strdup(yytext);RETURN_TOKEN(EXPRESSION);
 
 .                                                    printf("Unknown character [%c]\n",yytext[0]); return yytext[0];
 %%

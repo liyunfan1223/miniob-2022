@@ -40,6 +40,6 @@ public:
   RC tuple_cell_spec_at(int index, const TupleCellSpec *&spec) const;
 
   Tuple * current_tuple() override;
-private:
   ProjectTuple tuple_;
+private:
 };

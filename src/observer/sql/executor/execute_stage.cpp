@@ -50,6 +50,7 @@ See the Mulan PSL v2 for more details. */
 #include "storage/common/condition_filter.h"
 #include "storage/trx/trx.h"
 #include "storage/clog/clog.h"
+#include "sql/operator/exp_project_operator.h"
 
 using namespace common;
 
@@ -485,6 +486,16 @@ RC add_projection(Db * db, std::vector<Table *> & tables, size_t attr_num, RelAt
   for (size_t i = 0; i < attr_num; i++) {
     auto & attr = attributes[i];
     // select *
+    if (attr.is_exp) {
+      auto vec = parse_expression(attr.expression);
+      for (auto & item : vec) {
+        if (item->type == ATTR_ET) {
+          Table * table = item->rel_attr->relation_name == nullptr ? tables[0] : db->find_table(item->rel_attr->relation_name);
+          oper->add_projection(table, table->table_meta().field(item->rel_attr->attribute_name), item->rel_attr->aggType);
+        }
+      }
+      continue;
+    }
     if (attr.relation_name == nullptr && 0 == strcmp(attr.attribute_name, "*")) {
       if (attr.aggType == AGG_COUNT) {
         oper->add_projection(nullptr, "*", AGG_COUNT);
@@ -526,6 +537,7 @@ RC check_attr_in_group(size_t attr_num, RelAttr * attrs, size_t group_num, Group
   for (size_t i = 0; i < attr_num; i++) {
     RelAttr & attr = attrs[i];
     if (attr.is_agg) continue;
+    if (attr.is_exp) continue;
     bool in_group = false;
     for (size_t j = 0; j < group_num; j++) {
       GroupAttr & group = groups[j];
@@ -588,7 +600,8 @@ RC ExecuteStage::do_select(SQLStageEvent *sql_event)
   SubqueryPredicateOperator pred_oper(selects.conditions, selects.condition_num, tables[0]->name(), db);
   pred_oper.add_child(scan_opers[0]);
 
-  TablesJoinPredOperator join_pred_oper(scan_opers, select_stmt->filter_stmt());
+  TablesJoinPredOperator join_pred_oper(scan_opers, select_stmt->filter_stmt(),
+      selects.conditions, selects.condition_num);
 
   OrderOperator order_by_oper(selects.order_num, selects.order_attributes);
   if (scan_opers.size() == 1) {
@@ -604,11 +617,12 @@ RC ExecuteStage::do_select(SQLStageEvent *sql_event)
     session_event->set_response("FAILURE\n");
     return rc;
   }
+  Operator * tmp_oper = nullptr;
   Operator * output_oper = nullptr;
 
   bool has_agg = false;
-  for (size_t i = 0; i < selects.attr_num; i++) {
-    if (selects.attributes[i].is_agg) {
+  for (auto & item : project_oper.tuple_.speces_) {
+    if (item->agg_type != AGG_NONE) {
       has_agg = true;
     }
   }
@@ -622,11 +636,27 @@ RC ExecuteStage::do_select(SQLStageEvent *sql_event)
       session_event->set_response("FAILURE\n");
       return rc;
     }
-    output_oper = &groupOperator;
+    tmp_oper = &groupOperator;
   } else {
-    output_oper = &project_oper;
+    tmp_oper = &project_oper;
   }
 
+
+  ExpProjectOperator exp_oper(selects.attr_num, selects.attributes, tables, db);
+  exp_oper.add_child(tmp_oper);
+
+  bool has_exp_attr = 0;
+  for (size_t i = 0; i < selects.attr_num; i++) {
+    auto & attr = selects.attributes[i];
+    if (attr.is_exp) {
+      has_exp_attr = 1;
+    }
+  }
+  if (has_exp_attr) {
+    output_oper = &exp_oper;
+  } else {
+    output_oper = tmp_oper;
+  }
 
   rc = output_oper->open();
   std::stringstream ss;

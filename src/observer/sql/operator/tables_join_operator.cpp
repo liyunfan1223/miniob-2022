@@ -52,6 +52,11 @@ RC TablesJoinPredOperator::next()
   }
   current_records_ = product_records_[current_index_];
   current_index_++;
+  tuple_.set_records(&current_records_);
+
+  while(!do_predicate_by_cond(tuple_)) {
+    return next();
+  }
   return RC::SUCCESS;
 }
 
@@ -69,7 +74,7 @@ RC TablesJoinPredOperator::close()
 
 Tuple *TablesJoinPredOperator::current_tuple()
 {
-  tuple_.set_records(&current_records_);
+//  tuple_.set_records(&current_records_);
   return new JoinTuple(tuple_);
 }
 
@@ -146,7 +151,12 @@ bool TablesJoinPredOperator::do_predicate_( std::vector<Record *> &records, int 
     return true;
   }
 
+  int i = -1;
   for (const FilterUnit *filter_unit : filter_stmt_->filter_units()) {
+    i++;
+    if (conditions_[i].left_value.type == EXPRESSION_T || conditions_[i].right_value.type == EXPRESSION_T) {
+      continue;
+    }
     Expression *left_expr = filter_unit->left();
     Expression *right_expr = filter_unit->right();
     // 如果表达式为字段，且当前不可对其判断（未访问到相关表），则跳过
@@ -168,4 +178,85 @@ bool TablesJoinPredOperator::do_predicate_( std::vector<Record *> &records, int 
     }
   }
   return true;
+}
+
+bool TablesJoinPredOperator::do_predicate_by_cond(Tuple &tuple)
+{
+  bool result = true;
+  for (size_t i = 0; i < condition_num_; i++) {
+    Condition & cond = conditions_[i];
+    TupleCell tc_left, tc_right;
+    CompOp compOp = cond.comp;
+
+    if (cond.left_is_attr) {
+      RelAttr & relAttr = cond.left_attr;
+      tuple.find_cell(relAttr.relation_name, relAttr.attribute_name, tc_left);
+    } else {
+      Value & value = cond.left_value;
+      if (value.type == EXPRESSION_T) {
+        std::vector<ExpElement *> vec = parse_expression(value.expression);
+        get_tuple_cell_for_exp(vec, tuple, tc_left);
+      } else {
+        if (value.is_sub_select) {
+          assert(false);
+        } else {
+          if (value.is_null) {
+            tc_left.set_type(NULL_T);
+          } else {
+            tc_left.set_type(value.type);
+            tc_left.set_data((char *)value.data);
+            if (value.type == CHARS) {
+              tc_left.set_length(strlen((char *)value.data));
+            }
+          }
+        }
+      }
+    }
+
+    if (cond.right_is_attr) {
+      RelAttr & relAttr = cond.right_attr;
+      tuple.find_cell(relAttr.relation_name, relAttr.attribute_name, tc_right);
+    } else {
+      Value & value = cond.right_value;
+      if (value.type == EXPRESSION_T) {
+        std::vector<ExpElement *> vec = parse_expression(value.expression);
+        get_tuple_cell_for_exp(vec, tuple, tc_right);
+      } else {
+        if (value.is_sub_select) {
+          assert(false);
+        } else if (value.is_set) { // 处理 set
+          tc_right.is_set = 1;
+          for (int j = 0; j < value.set_length; j++) {
+            TupleCell * p_tmp_cell;
+            p_tmp_cell = new TupleCell(value.set_values[j].type, (char *)value.set_values[j].data);
+            tc_right.set_cells.push_back(p_tmp_cell);
+          }
+        } else {
+          if (value.is_null) {
+            tc_right.set_type(NULL_T);
+          } else {
+            tc_right.set_type(value.type);
+            tc_right.set_data((char *)value.data);
+            if (value.type == CHARS) {
+              tc_right.set_length(strlen((char *)value.data));
+            }
+          }
+        }
+      }
+    }
+
+    bool now_result = tc_left.condition_satisfy(compOp, tc_right);
+    switch (cond.conj) {
+      case CONJ_FIRST: {
+        result = now_result;
+      } break;
+      case CONJ_AND: {
+        result = result && now_result;
+      } break;
+      case CONJ_OR: {
+        result = result || now_result;
+      } break;
+    }
+  }
+  return result;
 }

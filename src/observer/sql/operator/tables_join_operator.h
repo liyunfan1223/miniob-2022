@@ -20,8 +20,9 @@ public:
 //    total_index_ = 1;
 //  }
 
-  TablesJoinPredOperator(std::vector<TableScanOperator*> scan_opers, FilterStmt *filter_stmt)
-      :scan_opers_(scan_opers), filter_stmt_(filter_stmt)
+  TablesJoinPredOperator(std::vector<TableScanOperator*> scan_opers, FilterStmt *filter_stmt,
+      Condition *conditions, size_t condition_num)
+      :scan_opers_(scan_opers), filter_stmt_(filter_stmt), conditions_(conditions), condition_num_(condition_num)
   {
     current_index_ = 0;
     field_length_ = 0;
@@ -51,6 +52,7 @@ private:
   RC cartesian_product_dfs_(int table_index);
   bool is_match(const char * str, const char * pattern, size_t pattern_length);
   bool do_predicate_( std::vector<Record *> &records , int record_length);
+  bool do_predicate_by_cond(Tuple &tuple);
   int32_t get_field_index_(FieldExpr * fieldExpr);
   std::vector<TableScanOperator*> scan_opers_;
   int32_t current_index_;
@@ -64,4 +66,6 @@ private:
   JoinTuple tuple_;
   FilterStmt *filter_stmt_ = nullptr;
   std::vector<TupleCellSpec *> speces_;
+  Condition *conditions_;
+  size_t condition_num_;
 };

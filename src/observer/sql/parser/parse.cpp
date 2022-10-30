@@ -31,7 +31,17 @@ void relation_attr_init(RelAttr *relation_attr, const char *relation_name, const
   }
   relation_attr->attribute_name = strdup(attribute_name);
   relation_attr->is_agg = false;
+  relation_attr->is_exp = 0;
   relation_attr->aggType = AGG_NONE;
+}
+
+void relation_attr_exp_init(RelAttr *relation_attr, const char *expression)
+{
+  relation_attr->relation_name = nullptr;
+  relation_attr->attribute_name = nullptr;
+
+  relation_attr->is_exp = 1;
+  relation_attr->expression = strdup(expression);
 }
 
 void relation_attr_aggr_init(
@@ -44,13 +54,18 @@ void relation_attr_aggr_init(
   }
   relation_attr->attribute_name = strdup(attribute_name);
   relation_attr->is_agg = true;
+  relation_attr->is_exp = 0;
   relation_attr->aggType = aggrType;
 }
 
 void relation_attr_destroy(RelAttr *relation_attr)
 {
-  free(relation_attr->relation_name);
-  free(relation_attr->attribute_name);
+  if (relation_attr->relation_name != nullptr) {
+    free(relation_attr->relation_name);
+  }
+  if (relation_attr->attribute_name != nullptr) {
+    free(relation_attr->attribute_name);
+  }
   relation_attr->relation_name = nullptr;
   relation_attr->attribute_name = nullptr;
 }
@@ -146,6 +161,15 @@ void value_init_set(Value *value, Value * set_values, size_t set_num)
   value->is_sub_select = 0;
   value->is_set = 1;
   value->set_length = set_num;
+}
+
+void value_init_expression(Value *value, char * expression)
+{
+  value->type = EXPRESSION_T;
+  value->is_null = 0;
+  value->is_set = 0;
+  value->is_sub_select = 0;
+  value->expression = strdup(expression);
 }
 
 void value_destroy(Value *value)

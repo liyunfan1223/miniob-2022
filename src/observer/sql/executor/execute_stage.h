@@ -19,6 +19,7 @@ See the Mulan PSL v2 for more details. */
 #include "sql/parser/parse.h"
 #include "rc.h"
 #include "sql/stmt/update_stmt.h"
+#include "util/util.h"
 
 class SQLStageEvent;
 class SessionEvent;

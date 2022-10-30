@@ -30,6 +30,7 @@ public:
     : attr_type_(attr_type), data_(data)
   {}
 
+  ~TupleCell(){}
   void set_type(AttrType type) { this->attr_type_ = type; }
   void set_length(int length) { this->length_ = length; }
   void set_data(char *data) { this->data_ = data; }

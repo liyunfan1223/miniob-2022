@@ -22,7 +22,10 @@ See the Mulan PSL v2 for more details. */
 #include "sql/expr/tuple_cell.h"
 #include "sql/expr/expression.h"
 #include "storage/record/record.h"
+#include "util/util.h"
 
+std::vector<ExpElement *> parse_expression(const char * expression);
+void get_tuple_cell_for_exp(std::vector<ExpElement *> & vec, Tuple & tuple, TupleCell & ret);
 class Table;
 
 class TupleCellSpec
@@ -64,6 +67,7 @@ public:
 
   AggType agg_type = AGG_NONE;
   AttrType attr_type = UNDEFINED;
+  int is_exp = 0;
 private:
   const char *table_alias_ = nullptr;
   const char *alias_ = nullptr;
@@ -80,8 +84,10 @@ public:
   virtual int cell_num() const = 0; 
   virtual RC  cell_at(int index, TupleCell &cell) const = 0;
   virtual RC  find_cell(const Field &field, TupleCell &cell) const = 0;
-
   virtual RC find_cell(const char * table_name, const char * field_name, TupleCell &cell) const {
+    return RC::UNIMPLENMENT;
+  }
+  virtual RC find_cell_agg(const char * table_name, const char * field_name, TupleCell &cell, AggType agg_type) const {
     return RC::UNIMPLENMENT;
   }
   virtual RC  cell_spec_at(int index, const TupleCellSpec *&spec) const = 0;
@@ -169,6 +175,19 @@ public:
     }
     return RC::NOTFOUND;
   }
+
+  RC find_cell_agg(const char *table_name, const char *field_name, TupleCell &cell, AggType agg_type) const
+  {
+    for (size_t i = 0; i < speces_.size(); ++i) {
+      const FieldExpr * field_expr = (const FieldExpr *)speces_[i]->expression();
+      const Field &field = field_expr->field();
+      if (0 == strcmp(field_name, field.field_name()) and (agg_type == speces_[i]->agg_type)) {
+        return cell_at(i, cell);
+      }
+    }
+    return RC::NOTFOUND;
+  }
+
 
   RC cell_spec_at(int index, const TupleCellSpec *&spec) const override
   {
@@ -291,6 +310,21 @@ public:
     }
     return RC::NOTFOUND;
   }
+
+  RC find_cell_agg(const char *table_name, const char *field_name, TupleCell &cell, AggType agg_type) const
+  {
+    for (size_t i = 0; i < speces_.size(); ++i) {
+      const FieldExpr * field_expr = (const FieldExpr *)speces_[i]->expression();
+      const Field &exprField = field_expr->field();
+//      auto & spec = speces_[i];
+      if (( table_name == nullptr || (0 == strcmp(table_name, exprField.table_name())))
+          and (0 == strcmp(field_name, exprField.field_name()))
+          and (agg_type == speces_[i]->agg_type) ) {
+        return cell_at(i, cell);
+      }
+    }
+    return RC::NOTFOUND;
+  }
   RC cell_spec_at(int index, const TupleCellSpec *&spec) const override
   {
     if (index < 0 || index >= static_cast<int>(speces_.size())) {
@@ -389,6 +423,11 @@ public:
     return tuple_->find_cell(table_name, field_name, cell);
   }
 
+  RC find_cell_agg(const char *table_name, const char *field_name, TupleCell &cell, AggType agg_type) const override
+  {
+    return tuple_->find_cell_agg(table_name, field_name, cell, agg_type);
+  }
+
   RC cell_spec_at(int index, const TupleCellSpec *&spec) const override
   {
     if (index < 0 || index >= static_cast<int>(speces_.size())) {
@@ -437,6 +476,21 @@ public:
       if ( ( table_name == nullptr ||
              ( table_name != nullptr && speces_[i]->table_alias() != nullptr && 0 == strcmp(table_name, speces_[i]->table_alias()) )
            ) && (0 == strcmp(field_name, speces_[i]->alias())) ) {
+        return cell_at(i, cell);
+      }
+    }
+    return RC::NOTFOUND;
+  }
+
+  RC find_cell_agg(const char *table_name, const char *field_name, TupleCell &cell, AggType agg_type) const override
+  {
+    for (size_t i = 0; i < speces_.size(); ++i) {
+      //      const FieldExpr * field_expr = (const FieldExpr *)speces_[i]->expression();
+      //      auto spece_table_name = speces_[i]-
+      //      const Field &exprField = field_expr->field();
+      if ( ( table_name == nullptr ||
+              ( table_name != nullptr && speces_[i]->table_alias() != nullptr && 0 == strcmp(table_name, speces_[i]->table_alias()) )
+                  ) && (0 == strcmp(field_name, speces_[i]->alias())) && (speces_[i]->agg_type == agg_type)) {
         return cell_at(i, cell);
       }
     }
@@ -767,6 +821,84 @@ public:
     tuple_cells_.push_back(tupleCell);
     return SUCCESS;
   }
+  std::vector<TupleCellSpec *> speces_;
+  std::vector<TupleCell> tuple_cells_;
+};
+
+class ExpProjectTuple: public Tuple {
+public:
+  ~ExpProjectTuple() override = default;
+  int cell_num() const override
+  {
+    return speces_.size();
+  }
+  RC cell_at(int index, TupleCell &cell) const override
+  {
+    cell = tuple_cells_[index];
+    return SUCCESS;
+  }
+  RC find_cell(const Field &field, TupleCell &cell) const override
+  {
+    const char *table_name = field.table_name();
+    const char *field_name = field.field_name();
+    for (size_t i = 0; i < speces_.size(); ++i) {
+      const FieldExpr * field_expr = (const FieldExpr *)speces_[i]->expression();
+      const Field &exprField = field_expr->field();
+      if ((0 == strcmp(table_name, exprField.table_name())) and (0 == strcmp(field_name, exprField.field_name()))) {
+        return cell_at(i, cell);
+      }
+    }
+    return RC::NOTFOUND;
+  }
+  RC find_cell(const char *table_name, const char *field_name, TupleCell &cell) const override
+  {
+    for (size_t i = 0; i < speces_.size(); ++i) {
+      //      const FieldExpr * field_expr = (const FieldExpr *)speces_[i]->expression();
+      //      auto spece_table_name = speces_[i]-
+      //      const Field &exprField = field_expr->field();
+      if ( ( table_name == nullptr ||
+              ( table_name != nullptr && speces_[i]->table_alias() != nullptr && 0 == strcmp(table_name, speces_[i]->table_alias()) )
+                  ) && (0 == strcmp(field_name, speces_[i]->alias())) ) {
+        return cell_at(i, cell);
+      }
+    }
+    return RC::NOTFOUND;
+  }
+//  RC find_cell(const char *table_name, const char *field_name, TupleCell &cell) const override
+//  {
+//    for (size_t i = 0; i < speces_.size(); ++i) {
+//      //      const FieldExpr * field_expr = (const FieldExpr *)speces_[i]->expression();
+//      //      auto spece_table_name = speces_[i]-
+//      //      const Field &exprField = field_expr->field();
+//      if ( ( table_name == nullptr ||
+//              ( table_name != nullptr && speces_[i]->table_alias() != nullptr && 0 == strcmp(table_name, speces_[i]->table_alias()) )
+//                  ) && (0 == strcmp(field_name, speces_[i]->alias())) ) {
+//        return cell_at(i, cell);
+//      }
+//    }
+//    return RC::NOTFOUND;
+//  }
+  RC cell_spec_at(int index, const TupleCellSpec *&spec) const override
+  {
+    spec = speces_[index];
+    return SUCCESS;
+  }
+  RC set_tuple_cells(int idx, Tuple * child_tuple) {
+//    JoinTuple * child_tuple = (JoinTuple *)tuple;
+    auto & spece = speces_[idx];
+//    AggType agg_type = spece->agg_type;
+//    AttrType attr_type = spece->attr_type;
+    TupleCell tupleCell;
+    if (spece->is_exp) {
+      std::vector<ExpElement *> vec = parse_expression(spece->alias());
+      get_tuple_cell_for_exp(vec, *child_tuple, tupleCell);
+    } else {
+        child_tuple->find_cell_agg(spece->table_alias(), spece->alias(), tupleCell, spece->agg_type);
+    }
+    tuple_cells_.push_back(tupleCell);
+    return SUCCESS;
+  }
+//  Tuple * child_tuple;
   std::vector<TupleCellSpec *> speces_;
   std::vector<TupleCell> tuple_cells_;
 };

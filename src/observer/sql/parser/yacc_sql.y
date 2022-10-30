@@ -155,6 +155,7 @@ ParserContext *get_context(yyscan_t scanner)
 %token <string> ID
 %token <string> PATH
 %token <string> SSS
+%token <string> EXPRESSION
 %token <string> STAR
 %token <string> STRING_V
 //非终结符
@@ -623,30 +624,37 @@ update_set:
 
 select:				/*  select 语句的语法解析树*/
     SELECT attr_list FROM ID inner_join_list rel_list where group order SEMICOLON
-		{
-			// CONTEXT->ssql->sstr.selection.relations[CONTEXT->from_length++]=$4;
-			selects_append_relation(&CONTEXT->ssql->sstr.selection, $4);
-
-			selects_append_conditions(&CONTEXT->ssql->sstr.selection, CONTEXT->conditions, CONTEXT->condition_length);
-
-			CONTEXT->ssql->flag=SCF_SELECT;//"select";
-			// CONTEXT->ssql->sstr.selection.attr_num = CONTEXT->select_length;
-
-			//临时变量清零
-			CONTEXT->condition_length=0;
-			CONTEXT->from_length=0;
-			CONTEXT->select_length=0;
-			CONTEXT->value_length = 0;
-	}
+    {
+	// CONTEXT->ssql->sstr.selection.relations[CONTEXT->from_length++]=$4;
+	selects_append_relation(&CONTEXT->ssql->sstr.selection, $4);
+	selects_append_conditions(&CONTEXT->ssql->sstr.selection, CONTEXT->conditions, CONTEXT->condition_length);
+	CONTEXT->ssql->flag=SCF_SELECT;//"select";
+	// CONTEXT->ssql->sstr.selection.attr_num = CONTEXT->select_length;
+	//临时变量清零
+	CONTEXT->condition_length=0;
+	CONTEXT->from_length=0;
+	CONTEXT->select_length=0;
+	CONTEXT->value_length = 0;
+    }
 	;
 
 attr_list:
     /* empty */
-    | COMMA select_attr attr_list {
+    | COMMA select_attr_or_expression attr_list {
     }
-    | select_attr attr_list {
+    | select_attr_or_expression attr_list {
     }
     ;
+
+select_attr_or_expression:
+    select_attr {
+
+    }
+    | EXPRESSION {
+    	RelAttr attr;
+    	relation_attr_exp_init(&attr, $1);
+    	selects_append_attribute(&CONTEXT->ssql->sstr.selection, &attr);
+    }
 
 select_attr:
     STAR {  
@@ -729,7 +737,7 @@ condition_list:
     }
     ;
 condition:
-    ID comOp value 
+    ID comOp value_or_expression
     {
 	RelAttr left_attr;
 	relation_attr_init(&left_attr, NULL, $1);
@@ -738,7 +746,7 @@ condition:
 	condition_conj_init(&condition, CONTEXT->comps[--CONTEXT->comp_num], 1, &left_attr, NULL, 0, NULL, right_value, CONTEXT->conj[--CONTEXT->conj_num]);
 	CONTEXT->conditions[CONTEXT->condition_length++] = condition;
     }
-    |value comOp value
+    |value_or_expression comOp value_or_expression
     {
 	Value *right_value = &CONTEXT->values[--CONTEXT->value_length];
 	Value *left_value = &CONTEXT->values[--CONTEXT->value_length];
@@ -758,7 +766,7 @@ condition:
 	condition_conj_init(&condition, CONTEXT->comps[--CONTEXT->comp_num], 1, &left_attr, NULL, 1, &right_attr, NULL, CONTEXT->conj[--CONTEXT->conj_num]);
 	CONTEXT->conditions[CONTEXT->condition_length++] = condition;
     }
-    |value comOp ID
+    |value_or_expression comOp ID
     {
 	Value *left_value = &CONTEXT->values[--CONTEXT->value_length];
 	RelAttr right_attr;
@@ -768,7 +776,7 @@ condition:
 	condition_conj_init(&condition, CONTEXT->comps[--CONTEXT->comp_num], 0, NULL, left_value, 1, &right_attr, NULL, CONTEXT->conj[--CONTEXT->conj_num]);
 	CONTEXT->conditions[CONTEXT->condition_length++] = condition;
     }
-    |ID DOT ID comOp value
+    |ID DOT ID comOp value_or_expression
     {
 	RelAttr left_attr;
 	relation_attr_init(&left_attr, $1, $3);
@@ -778,7 +786,7 @@ condition:
 	condition_conj_init(&condition, CONTEXT->comps[--CONTEXT->comp_num], 1, &left_attr, NULL, 0, NULL, right_value, CONTEXT->conj[--CONTEXT->conj_num]);
 	CONTEXT->conditions[CONTEXT->condition_length++] = condition;
     }
-    |value comOp ID DOT ID
+    |value_or_expression comOp ID DOT ID
     {
 	Value *left_value = &CONTEXT->values[--CONTEXT->value_length];
 
@@ -818,6 +826,17 @@ condition:
     	condition_conj_init(&condition, NOT_EXISTS_OP, 0, NULL, &left_value, 0, NULL, right_value, CONTEXT->conj[--CONTEXT->conj_num]);
     	CONTEXT->conditions[CONTEXT->condition_length++] = condition;
     }
+
+value_or_expression:
+    value {
+
+    }
+    | EXPRESSION {
+	// $1 = substr($1,1,strlen($1)-2);
+	value_init_expression(&CONTEXT->values[CONTEXT->value_length++], $1);
+    }
+    ;
+
 group:
     /* empty */
     | GROUP BY group_attr_list {

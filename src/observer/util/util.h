@@ -15,5 +15,12 @@ See the Mulan PSL v2 for more details. */
 #pragma once
 
 #include <string>
+#include <vector>
+#include <string.h>
+#include "sql/parser/parse.h"
+#include "sql/expr/tuple.h"
+#include <algorithm>
 
 std::string double2string(double v);
+std::vector<ExpElement *> parse_expression(const char * expression);
+void get_tuple_cell_for_exp(std::vector<ExpElement *> & vec, Tuple & tuple, TupleCell & ret);

@@ -239,22 +239,27 @@ bool SubqueryPredicateOperator::do_predicate_by_cond(Tuple &tuple)
       }
     } else {
       Value & value = cond.left_value;
-      if (value.is_sub_select) {
-        parent_tuples_.push_back(&tuple);
-        parent_rel_.push_back(rel_name_);
-        if (execute_sub_query(parent_tuples_, parent_rel_, value.selects, tc_left, db_) != SUCCESS) {
-          throw 0;
-        }
-        parent_tuples_.pop_back();
-        parent_rel_.pop_back();
+      if (value.type == EXPRESSION_T) {
+        std::vector<ExpElement *> vec = parse_expression(value.expression);
+        get_tuple_cell_for_exp(vec, tuple, tc_left);
       } else {
-        if (value.is_null) {
-          tc_left.set_type(NULL_T);
+        if (value.is_sub_select) {
+          parent_tuples_.push_back(&tuple);
+          parent_rel_.push_back(rel_name_);
+          if (execute_sub_query(parent_tuples_, parent_rel_, value.selects, tc_left, db_) != SUCCESS) {
+            throw 0;
+          }
+          parent_tuples_.pop_back();
+          parent_rel_.pop_back();
         } else {
-          tc_left.set_type(value.type);
-          tc_left.set_data((char *)value.data);
-          if (value.type == CHARS) {
-            tc_left.set_length(strlen((char *)value.data));
+          if (value.is_null) {
+            tc_left.set_type(NULL_T);
+          } else {
+            tc_left.set_type(value.type);
+            tc_left.set_data((char *)value.data);
+            if (value.type == CHARS) {
+              tc_left.set_length(strlen((char *)value.data));
+            }
           }
         }
       }
@@ -274,29 +279,34 @@ bool SubqueryPredicateOperator::do_predicate_by_cond(Tuple &tuple)
       }
     } else {
       Value & value = cond.right_value;
-      if (value.is_sub_select) {
-        parent_tuples_.push_back(&tuple);
-        parent_rel_.push_back(rel_name_);
-        if (execute_sub_query(parent_tuples_, parent_rel_, value.selects, tc_right, db_) != SUCCESS) {
-          throw 0;
-        }
-        parent_tuples_.pop_back();
-        parent_rel_.pop_back();
-      } else if (value.is_set) { // 处理 set
-        tc_right.is_set = 1;
-        for (int j = 0; j < value.set_length; j++) {
-          TupleCell * p_tmp_cell;
-          p_tmp_cell = new TupleCell(value.set_values[j].type, (char *)value.set_values[j].data);
-          tc_right.set_cells.push_back(p_tmp_cell);
-        }
+      if (value.type == EXPRESSION_T) {
+        std::vector<ExpElement *> vec = parse_expression(value.expression);
+        get_tuple_cell_for_exp(vec, tuple, tc_right);
       } else {
-        if (value.is_null) {
-          tc_right.set_type(NULL_T);
+        if (value.is_sub_select) {
+          parent_tuples_.push_back(&tuple);
+          parent_rel_.push_back(rel_name_);
+          if (execute_sub_query(parent_tuples_, parent_rel_, value.selects, tc_right, db_) != SUCCESS) {
+            throw 0;
+          }
+          parent_tuples_.pop_back();
+          parent_rel_.pop_back();
+        } else if (value.is_set) { // 处理 set
+          tc_right.is_set = 1;
+          for (int j = 0; j < value.set_length; j++) {
+            TupleCell * p_tmp_cell;
+            p_tmp_cell = new TupleCell(value.set_values[j].type, (char *)value.set_values[j].data);
+            tc_right.set_cells.push_back(p_tmp_cell);
+          }
         } else {
-          tc_right.set_type(value.type);
-          tc_right.set_data((char *)value.data);
-          if (value.type == CHARS) {
-            tc_right.set_length(strlen((char *)value.data));
+          if (value.is_null) {
+            tc_right.set_type(NULL_T);
+          } else {
+            tc_right.set_type(value.type);
+            tc_right.set_data((char *)value.data);
+            if (value.type == CHARS) {
+              tc_right.set_length(strlen((char *)value.data));
+            }
           }
         }
       }

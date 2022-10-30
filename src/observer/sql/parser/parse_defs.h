@@ -23,6 +23,30 @@ See the Mulan PSL v2 for more details. */
 #define MAX_ERROR_MESSAGE 20
 #define MAX_DATA 50
 
+typedef struct _Selects Selects;
+typedef struct _Value Value;
+typedef struct _RelAttr RelAttr;
+
+typedef enum {
+  PLUS_ET,
+  MINUS_ET,
+  MUL_ET,
+  DIVIDE_ET,
+  LBRACE_ET,
+  RBRACE_ET,
+  VALUE_ET,
+  ATTR_ET
+} ExpressionType;
+
+typedef struct _ExpElement {
+//  _ExpElement() {}
+//  _ExpElement(ExpressionType type, Value * value, RelAttr * rel_attr):
+//  type(type), value(value), rel_attr(rel_attr){}
+  ExpressionType type;
+  Value * value;
+  RelAttr * rel_attr;
+} ExpElement;
+
 typedef enum {
   AGG_MAX,
   AGG_MIN,
@@ -33,11 +57,13 @@ typedef enum {
 } AggType;
 
 //属性结构体
-typedef struct {
+typedef struct _RelAttr{
   char *relation_name;   // relation name (may be NULL) 表名
   char *attribute_name;  // attribute name              属性名
   int is_agg;
   AggType aggType;
+  int is_exp;
+  char *expression;
 } RelAttr;
 
 typedef struct {
@@ -81,6 +107,7 @@ typedef enum
   DATES,
   TEXTS,
   NULL_T,
+  EXPRESSION_T,
 } AttrType;
 
 typedef enum {
@@ -88,9 +115,6 @@ typedef enum {
   CONJ_AND,
   CONJ_OR
 } Conjunction;
-
-typedef struct _Selects Selects;
-typedef struct _Value Value;
 
 typedef struct _Value {
   AttrType type;  // type of value
@@ -101,6 +125,7 @@ typedef struct _Value {
   int is_set;
   int set_length;
   Value * set_values;
+  char * expression;
 } Value;
 
 typedef struct _Condition {
@@ -260,6 +285,7 @@ extern "C" {
 #endif  // __cplusplus
 
 void relation_attr_init(RelAttr *relation_attr, const char *relation_name, const char *attribute_name);
+void relation_attr_exp_init(RelAttr *relation_attr, const char *expression);
 void relation_attr_aggr_init(
     RelAttr *relation_attr, const char *relation_name, const char *attribute_name, AggType aggrType);
 void relation_attr_destroy(RelAttr *relation_attr);

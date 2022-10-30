@@ -16,6 +16,7 @@
 #include "sql/operator/group_operator.h"
 #include "sql/operator/subquery_predicate_operator.h"
 #include "storage/common/db.h"
+#include "util/util.h"
 
 class FilterStmt;
 
