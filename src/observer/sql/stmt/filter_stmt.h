@@ -87,10 +87,12 @@ public:
 
 public:
   static RC create(Db *db, Table *default_table, std::unordered_map<std::string, Table *> *tables,
+            std::unordered_map<std::string, char *> *alias,
 			const Condition *conditions, int condition_num,
 			FilterStmt *&stmt);
 
   static RC create_filter_unit(Db *db, Table *default_table, std::unordered_map<std::string, Table *> *tables,
+      std::unordered_map<std::string, char *> *alias,
 			       const Condition &condition, FilterUnit *&filter_unit);
   static bool check_date(int val);
 private:

@@ -33,6 +33,11 @@ typedef struct ParserContext {
   size_t set_num;
   Conjunction conj[MAX_NUM];
   size_t conj_num;
+  char * rel[MAX_NUM];
+  char * rel_alias[MAX_NUM];
+  size_t rel_num;
+  char * alias_stack[MAX_NUM];
+  size_t alias_stack_pt;
 } ParserContext;
 
 //获取子串
@@ -138,6 +143,7 @@ ParserContext *get_context(yyscan_t scanner)
         EXISTS
         IS
         OR
+        AS
 
 %union {
   struct _Attr *attr;
@@ -433,8 +439,7 @@ set_value_list:
     ;
 
 sub_select:
-    sub_select_token sub_attr_list FROM sub_rel_list sub_where {
-
+    sub_select_token sub_select_attr sub_attr_list FROM sub_rel_item sub_rel_list sub_where {
     }
     ;
 
@@ -448,9 +453,6 @@ sub_attr_list:
     /* empty */
     | COMMA sub_select_attr sub_attr_list {
     }
-    | sub_select_attr sub_attr_list {
-
-    }
     ;
 
 sub_select_attr:
@@ -459,27 +461,27 @@ sub_select_attr:
 	relation_attr_init(&attr, NULL, "*");
  	selects_append_attribute(&CONTEXT->sub_selects[CONTEXT->sub_select_num], &attr);
     }
-    | ID {
+    | ID alias_or_not {
         RelAttr attr;
 	relation_attr_init(&attr, NULL, $1);
 	selects_append_attribute(&CONTEXT->sub_selects[CONTEXT->sub_select_num], &attr);
     }
-    | ID DOT ID {
+    | ID DOT ID alias_or_not {
         RelAttr attr;
 	relation_attr_init(&attr, $1, $3);
 	selects_append_attribute(&CONTEXT->sub_selects[CONTEXT->sub_select_num], &attr);
     }
-    | aggop LBRACE STAR RBRACE {
+    | aggop LBRACE STAR RBRACE alias_or_not {
 	RelAttr attr;
 	relation_attr_aggr_init(&attr, NULL, "*", CONTEXT->agg_type);
 	selects_append_attribute(&CONTEXT->sub_selects[CONTEXT->sub_select_num], &attr);
     }
-    | aggop LBRACE ID RBRACE {
+    | aggop LBRACE ID RBRACE alias_or_not {
     	RelAttr attr;
     	relation_attr_aggr_init(&attr, NULL, $3, CONTEXT->agg_type);
     	selects_append_attribute(&CONTEXT->sub_selects[CONTEXT->sub_select_num], &attr);
     }
-    | aggop LBRACE ID DOT ID RBRACE {
+    | aggop LBRACE ID DOT ID RBRACE alias_or_not {
     	RelAttr attr;
     	relation_attr_aggr_init(&attr, $3, $5, CONTEXT->agg_type);
     	selects_append_attribute(&CONTEXT->sub_selects[CONTEXT->sub_select_num], &attr);
@@ -488,13 +490,22 @@ sub_select_attr:
 
 sub_rel_list:
     /* empty */
-    | ID rel_list {
-	selects_append_relation(&CONTEXT->sub_selects[CONTEXT->sub_select_num], $1);
-    }
-    | COMMA ID rel_list {
-    	selects_append_relation(&CONTEXT->sub_selects[CONTEXT->sub_select_num], $2);
+    | COMMA sub_rel_item rel_list {
+
     }
     ;
+
+sub_rel_item:
+    ID {
+	selects_append_relation_alias(&CONTEXT->sub_selects[CONTEXT->sub_select_num], $1, NULL);
+    }
+    | ID ID {
+	selects_append_relation_alias(&CONTEXT->sub_selects[CONTEXT->sub_select_num], $1, $2);
+    }
+    | ID AS ID {
+	selects_append_relation_alias(&CONTEXT->sub_selects[CONTEXT->sub_select_num], $1, $3);
+    }
+
 sub_where:
     /* empty */
     | WHERE sub_condition_list {
@@ -623,10 +634,14 @@ update_set:
     };
 
 select:				/*  select 语句的语法解析树*/
-    SELECT attr_list FROM ID inner_join_list rel_list where group order SEMICOLON
+    SELECT select_attr_or_expression attr_list FROM rel_item rel_list inner_join_list where group order SEMICOLON
     {
 	// CONTEXT->ssql->sstr.selection.relations[CONTEXT->from_length++]=$4;
-	selects_append_relation(&CONTEXT->ssql->sstr.selection, $4);
+	// selects_append_relation(&CONTEXT->ssql->sstr.selection, $4);
+	for (int i = (int)CONTEXT->rel_num - 1; i >= 0; i--) {
+	    selects_append_relation_alias(&CONTEXT->ssql->sstr.selection, CONTEXT->rel[i], CONTEXT->rel_alias[i]);
+       	}
+
 	selects_append_conditions(&CONTEXT->ssql->sstr.selection, CONTEXT->conditions, CONTEXT->condition_length);
 	CONTEXT->ssql->flag=SCF_SELECT;//"select";
 	// CONTEXT->ssql->sstr.selection.attr_num = CONTEXT->select_length;
@@ -641,8 +656,6 @@ select:				/*  select 语句的语法解析树*/
 attr_list:
     /* empty */
     | COMMA select_attr_or_expression attr_list {
-    }
-    | select_attr_or_expression attr_list {
     }
     ;
 
@@ -662,29 +675,34 @@ select_attr:
 	relation_attr_init(&attr, NULL, "*");
  	selects_append_attribute(&CONTEXT->ssql->sstr.selection, &attr);
     }
-    | ID {
-        RelAttr attr;
-	relation_attr_init(&attr, NULL, $1);
-	selects_append_attribute(&CONTEXT->ssql->sstr.selection, &attr);
-    }
-    | ID DOT ID {
-        RelAttr attr;
-	relation_attr_init(&attr, $1, $3);
-	selects_append_attribute(&CONTEXT->ssql->sstr.selection, &attr);
-    }
-    | aggop LBRACE STAR RBRACE {
-	RelAttr attr;
-	relation_attr_aggr_init(&attr, NULL, "*", CONTEXT->agg_type);
-	selects_append_attribute(&CONTEXT->ssql->sstr.selection, &attr);
-    }
-    | aggop LBRACE ID RBRACE {
+    | ID DOT STAR {
     	RelAttr attr;
-    	relation_attr_aggr_init(&attr, NULL, $3, CONTEXT->agg_type);
+    	relation_attr_init(&attr, $1, "*");
+     	selects_append_attribute(&CONTEXT->ssql->sstr.selection, &attr);
+    }
+    | ID alias_or_not {
+        RelAttr attr;
+	relation_attr_alias_init(&attr, NULL, $1, CONTEXT->alias_stack[--CONTEXT->alias_stack_pt]);
+	selects_append_attribute(&CONTEXT->ssql->sstr.selection, &attr);
+    }
+    | ID DOT ID alias_or_not {
+        RelAttr attr;
+	relation_attr_alias_init(&attr, $1, $3, CONTEXT->alias_stack[--CONTEXT->alias_stack_pt]);
+	selects_append_attribute(&CONTEXT->ssql->sstr.selection, &attr);
+    }
+    | aggop LBRACE STAR RBRACE alias_or_not {
+	RelAttr attr;
+	relation_attr_aggr_alias_init(&attr, NULL, "*", CONTEXT->agg_type, CONTEXT->alias_stack[--CONTEXT->alias_stack_pt]);
+	selects_append_attribute(&CONTEXT->ssql->sstr.selection, &attr);
+    }
+    | aggop LBRACE ID RBRACE alias_or_not {
+    	RelAttr attr;
+    	relation_attr_aggr_alias_init(&attr, NULL, $3, CONTEXT->agg_type, CONTEXT->alias_stack[--CONTEXT->alias_stack_pt]);
     	selects_append_attribute(&CONTEXT->ssql->sstr.selection, &attr);
     }
-    | aggop LBRACE ID DOT ID RBRACE {
+    | aggop LBRACE ID DOT ID RBRACE alias_or_not {
     	RelAttr attr;
-    	relation_attr_aggr_init(&attr, $3, $5, CONTEXT->agg_type);
+    	relation_attr_aggr_alias_init(&attr, $3, $5, CONTEXT->agg_type, CONTEXT->alias_stack[--CONTEXT->alias_stack_pt]);
     	selects_append_attribute(&CONTEXT->ssql->sstr.selection, &attr);
     }
     ;
@@ -705,11 +723,24 @@ aggop:
     	CONTEXT->agg_type = AGG_SUM;
     }
     ;
+
+alias_or_not:
+    /* empty */ {
+	CONTEXT->alias_stack[CONTEXT->alias_stack_pt++] = NULL;
+    }
+    | ID {
+	CONTEXT->alias_stack[CONTEXT->alias_stack_pt++] = strdup($1);
+    }
+    | AS ID {
+	CONTEXT->alias_stack[CONTEXT->alias_stack_pt++] = strdup($2);
+    }
+
 inner_join_list:
     /* empty */
     | INNER JOIN ID on inner_join_list {
 	selects_append_relation(&CONTEXT->ssql->sstr.selection, $3);
     }
+    ;
 
 on:
     /* empty */
@@ -718,17 +749,34 @@ on:
     }
     ;
 
-
-
 rel_list:
     /* empty */
-    | COMMA ID rel_list {	
-				selects_append_relation(&CONTEXT->ssql->sstr.selection, $2);
-		  }
+    | COMMA rel_item rel_list {
+    }
     ;
+
+rel_item:
+    ID {
+	CONTEXT->rel[CONTEXT->rel_num] = strdup($1);
+	CONTEXT->rel_alias[CONTEXT->rel_num++] = NULL;
+        // selects_append_relation(&CONTEXT->ssql->sstr.selection, $1);
+    }
+    | ID ID {
+        CONTEXT->rel[CONTEXT->rel_num] = strdup($1);
+        CONTEXT->rel_alias[CONTEXT->rel_num++] = strdup($2);
+      	// selects_append_relation(&CONTEXT->ssql->sstr.selection, $1);
+    }
+    | ID AS ID {
+        CONTEXT->rel[CONTEXT->rel_num] = strdup($1);
+        CONTEXT->rel_alias[CONTEXT->rel_num++] = strdup($3);
+	// selects_append_relation(&CONTEXT->ssql->sstr.selection, $1);
+    }
+    ;
+
 where:
     /* empty */ 
     | WHERE condition_list {
+
     }
     ;
 condition_list:
@@ -745,6 +793,7 @@ condition:
 	Condition condition;
 	condition_conj_init(&condition, CONTEXT->comps[--CONTEXT->comp_num], 1, &left_attr, NULL, 0, NULL, right_value, CONTEXT->conj[--CONTEXT->conj_num]);
 	CONTEXT->conditions[CONTEXT->condition_length++] = condition;
+	printf("WHERE FINISHED %d\n", CONTEXT->condition_length);
     }
     |value_or_expression comOp value_or_expression
     {
@@ -794,6 +843,7 @@ condition:
 	relation_attr_init(&right_attr, $3, $5);
 
 	Condition condition;
+	condition_conj_init(&condition, CONTEXT->comps[--CONTEXT->comp_num], 0, NULL, left_value, 1, &right_attr, NULL, CONTEXT->conj[--CONTEXT->conj_num]);
 	condition_conj_init(&condition, CONTEXT->comps[--CONTEXT->comp_num], 0, NULL, left_value, 1, &right_attr, NULL, CONTEXT->conj[--CONTEXT->conj_num]);
 	CONTEXT->conditions[CONTEXT->condition_length++] = condition;
     }
@@ -987,7 +1037,10 @@ extern void scan_string(const char *str, yyscan_t scanner);
 int sql_parse(const char *s, Query *sqls){
 	ParserContext context;
 	memset(&context, 0, sizeof(context));
-
+//	for (int i = 0; i < MAX_NUM; i++) {
+//	    context.rel[i] = (char *)malloc(MAX_NUM * sizeof(char));
+//	    context.rel_alias[i] = (char *)malloc(MAX_NUM * sizeof(char));
+//	}
 	yyscan_t scanner;
 	yylex_init_extra(&context, &scanner);
 	context.ssql = sqls;

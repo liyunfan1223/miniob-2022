@@ -21,6 +21,7 @@
 class ExpProjectOperator: public Operator {
 
 public:
+  ExpProjectOperator(){}
   ExpProjectOperator(size_t attr_num, RelAttr * attributes, std::vector<Table *> tables, Db * db):
     attr_num_(attr_num), attributes_(attributes)
   {
@@ -46,6 +47,9 @@ public:
         }
       } else {
         Table * table = attr.relation_name == nullptr ? tables[0] : db->find_table(attr.relation_name);
+        if (table == nullptr) {
+          return;
+        }
         // select id.*
         if (0 == strcmp(attr.attribute_name, "*")) {
           const TableMeta &table_meta = table->table_meta();

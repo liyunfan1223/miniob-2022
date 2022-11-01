@@ -70,7 +70,7 @@ RC SubqueryPredicateOperator::replace_exists(Selects & selects) {
   return SUCCESS;
 }
 
-RC SubqueryPredicateOperator::add_projection(Db * db, std::vector<Table *> & tables, size_t attr_num, RelAttr * attributes, ProjectOperator *oper) {
+RC SubqueryPredicateOperator::add_projection(Db * db, std::vector<Table *> & tables, size_t attr_num, RelAttr * attributes, ProjectOperator *oper, std::unordered_map<std::string, char *> & rel_alias) {
   for (size_t i = 0; i < attr_num; i++) {
     auto & attr = attributes[i];
     // select *
@@ -83,7 +83,7 @@ RC SubqueryPredicateOperator::add_projection(Db * db, std::vector<Table *> & tab
           const TableMeta &table_meta = table->table_meta();
           const int field_num = table_meta.field_num();
           for (int k = table_meta.sys_field_num(); k < field_num; k++) {
-            oper->add_projection(table, table_meta.field(k), attr.aggType);
+            oper->add_projection(table, table_meta.field(k), attr.aggType, rel_alias[std::string(table->name())], nullptr);
           }
         }
       } else {
@@ -91,19 +91,27 @@ RC SubqueryPredicateOperator::add_projection(Db * db, std::vector<Table *> & tab
       }
     } else {
       Table * table = attr.relation_name == nullptr ? tables[0] : db->find_table(attr.relation_name);
+      if (table == nullptr) {
+        for (auto & item : rel_alias) {
+          if (item.second != nullptr && 0 == strcmp(attr.relation_name, item.second)) {
+            table = db->find_table(item.first.c_str());
+            break;
+          }
+        }
+      }
       // select id.*
       if (0 == strcmp(attr.attribute_name, "*")) {
         const TableMeta &table_meta = table->table_meta();
         const int field_num = table_meta.field_num();
         for (int j = table_meta.sys_field_num(); j < field_num; j++) {
-          oper->add_projection(table, table_meta.field(j), attr.aggType);
+          oper->add_projection(table, table_meta.field(j), attr.aggType, rel_alias[std::string(table->name())], nullptr);
         }
       } else {
         // select id.id
         if (table->table_meta().field(attr.attribute_name) == nullptr) {
           return RC::GENERIC_ERROR;
         }
-        oper->add_projection(table, table->table_meta().field(attr.attribute_name), attr.aggType);
+        oper->add_projection(table, table->table_meta().field(attr.attribute_name), attr.aggType, rel_alias[std::string(table->name())], attr.alias_name);
       }
     }
   }
@@ -133,7 +141,7 @@ RC SubqueryPredicateOperator::check_attr_in_group(size_t attr_num, RelAttr * att
 }
 
 RC SubqueryPredicateOperator::execute_sub_query(std::vector<Tuple *> &parent_tuples,
-    std::vector<const char *> &parent_rels, Selects *selects, TupleCell &ret_cell, Db * db_)
+    std::vector<const char *> &parent_rels, std::vector<const char *> &parent_alias_rels, Selects *selects, TupleCell &ret_cell, Db * db_)
 {
   RC rc = RC::SUCCESS;
   replace_exists(*selects);
@@ -151,17 +159,22 @@ RC SubqueryPredicateOperator::execute_sub_query(std::vector<Tuple *> &parent_tup
     scan_opers.push_back(new TableScanOperator(table));
   }
 
-  SubqueryPredicateOperator pred_oper(selects->conditions, selects->condition_num, tables[0]->name(), db_,
-      parent_tuples, parent_rels);
+  SubqueryPredicateOperator pred_oper(selects->conditions, selects->condition_num, tables[0]->name(), selects->relations_alias[0], db_,
+      parent_tuples, parent_rels, parent_alias_rels);
   pred_oper.add_child(scan_opers[0]);
 
 //  OrderOperator order_by_oper(selects->order_num, selects->order_attributes);
 //
 //  order_by_oper.add_child(&pred_oper);
 
+  std::unordered_map<std::string, char *> rel_alias;
+  for (size_t i = 0; i < selects->relation_num; i++) {
+    rel_alias[std::string(selects->relations[i])] = selects->relations_alias[i];
+  }
+
   ProjectOperator project_oper;
   project_oper.add_child(&pred_oper);
-  rc = add_projection(db_, tables, selects->attr_num, selects->attributes, &project_oper);
+  rc = add_projection(db_, tables, selects->attr_num, selects->attributes, &project_oper, rel_alias);
   if (rc != SUCCESS) {
 //    session_event->set_response("FAILURE\n");
     return rc;
@@ -227,12 +240,12 @@ bool SubqueryPredicateOperator::do_predicate_by_cond(Tuple &tuple)
 
     if (cond.left_is_attr) {
       RelAttr & relAttr = cond.left_attr;
-      if (relAttr.relation_name == nullptr || strcmp(rel_name_, relAttr.relation_name) == 0) {
-        tuple.find_cell(relAttr.relation_name, relAttr.attribute_name, tc_left);
+      if (relAttr.relation_name == nullptr || strcmp(rel_name_, relAttr.relation_name) == 0 || rel_alias_name_ != nullptr && strcmp(rel_alias_name_, relAttr.relation_name) == 0) {
+        tuple.find_cell(rel_name_, relAttr.attribute_name, tc_left);
       } else {
         for (int i = 0; i < (int)parent_rel_.size(); i++) {
-          if (strcmp(relAttr.relation_name, parent_rel_[i]) == 0) {
-            parent_tuples_[i]->find_cell(relAttr.relation_name, relAttr.attribute_name, tc_left);
+          if (strcmp(relAttr.relation_name, parent_rel_[i]) == 0 || (parent_alias_rel_[i] != nullptr && strcmp(relAttr.relation_name, parent_alias_rel_[i]) == 0)) {
+            parent_tuples_[i]->find_cell(parent_rel_[i], relAttr.attribute_name, tc_left);
             break;
           }
         }
@@ -246,11 +259,13 @@ bool SubqueryPredicateOperator::do_predicate_by_cond(Tuple &tuple)
         if (value.is_sub_select) {
           parent_tuples_.push_back(&tuple);
           parent_rel_.push_back(rel_name_);
-          if (execute_sub_query(parent_tuples_, parent_rel_, value.selects, tc_left, db_) != SUCCESS) {
+          parent_alias_rel_.push_back(rel_alias_name_);
+          if (execute_sub_query(parent_tuples_, parent_rel_, parent_alias_rel_, value.selects, tc_left, db_) != SUCCESS) {
             throw 0;
           }
           parent_tuples_.pop_back();
           parent_rel_.pop_back();
+          parent_alias_rel_.push_back(rel_alias_name_);
         } else {
           if (value.is_null) {
             tc_left.set_type(NULL_T);
@@ -267,12 +282,12 @@ bool SubqueryPredicateOperator::do_predicate_by_cond(Tuple &tuple)
 
     if (cond.right_is_attr) {
       RelAttr & relAttr = cond.right_attr;
-      if (relAttr.relation_name == nullptr || strcmp(rel_name_, relAttr.relation_name) == 0) {
-        tuple.find_cell(relAttr.relation_name, relAttr.attribute_name, tc_right);
+      if (relAttr.relation_name == nullptr || strcmp(rel_name_, relAttr.relation_name) == 0 || rel_alias_name_ != nullptr && strcmp(rel_alias_name_, relAttr.relation_name) == 0) {
+        tuple.find_cell(rel_name_, relAttr.attribute_name, tc_right);
       } else {
         for (int j = 0; j < (int)parent_rel_.size(); j++) {
-          if (strcmp(relAttr.relation_name, parent_rel_[j]) == 0) {
-            parent_tuples_[j]->find_cell(relAttr.relation_name, relAttr.attribute_name, tc_right);
+          if (strcmp(relAttr.relation_name, parent_rel_[j]) == 0 || (parent_alias_rel_[j] != nullptr && strcmp(relAttr.relation_name, parent_alias_rel_[j]) == 0)) {
+            parent_tuples_[j]->find_cell(parent_rel_[j], relAttr.attribute_name, tc_right);
             break;
           }
         }
@@ -286,11 +301,13 @@ bool SubqueryPredicateOperator::do_predicate_by_cond(Tuple &tuple)
         if (value.is_sub_select) {
           parent_tuples_.push_back(&tuple);
           parent_rel_.push_back(rel_name_);
-          if (execute_sub_query(parent_tuples_, parent_rel_, value.selects, tc_right, db_) != SUCCESS) {
+          parent_alias_rel_.push_back(rel_alias_name_);
+          if (execute_sub_query(parent_tuples_, parent_rel_, parent_alias_rel_, value.selects, tc_right, db_) != SUCCESS) {
             throw 0;
           }
           parent_tuples_.pop_back();
           parent_rel_.pop_back();
+          parent_alias_rel_.pop_back();
         } else if (value.is_set) { // 处理 set
           tc_right.is_set = 1;
           for (int j = 0; j < value.set_length; j++) {

@@ -49,6 +49,7 @@ RC SelectStmt::create(Db *db, const Selects &select_sql, Stmt *&stmt)
   // collect tables in `from` statement
   std::vector<Table *> tables;
   std::unordered_map<std::string, Table *> table_map;
+  std::unordered_map<std::string, char *> table_alias;
   for (int32_t i = (int32_t)select_sql.relation_num - 1; i >= 0; i--) {
     const char *table_name = select_sql.relations[i];
     if (nullptr == table_name) {
@@ -64,6 +65,7 @@ RC SelectStmt::create(Db *db, const Selects &select_sql, Stmt *&stmt)
 
     tables.push_back(table);
     table_map.insert(std::pair<std::string, Table*>(table_name, table));
+    table_alias.insert(std::pair<std::string, char *>(table_name, select_sql.relations_alias[i]));
   }
   
   // collect query fields in `select` statement
@@ -94,8 +96,19 @@ RC SelectStmt::create(Db *db, const Selects &select_sql, Stmt *&stmt)
       } else {
         auto iter = table_map.find(table_name);
         if (iter == table_map.end()) {
-          LOG_WARN("no such table in from list: %s", table_name);
-          return RC::SCHEMA_FIELD_MISSING;
+          bool ok = 0;
+          for (auto item : table_alias) {
+            if (item.second == nullptr) continue;
+            if (strcmp(table_name, item.second) == 0) {
+              ok = 1;
+              iter = table_map.find(item.first);
+              break;
+            }
+          }
+          if (!ok) {
+            LOG_WARN("no such table in from list: %s", table_name);
+            return RC::SCHEMA_FIELD_MISSING;
+          }
         }
 
         Table *table = iter->second;
@@ -137,7 +150,7 @@ RC SelectStmt::create(Db *db, const Selects &select_sql, Stmt *&stmt)
 
   // create filter statement in `where` statement
   FilterStmt *filter_stmt = nullptr;
-  RC rc = FilterStmt::create(db, default_table, &table_map,
+  RC rc = FilterStmt::create(db, default_table, &table_map, &table_alias,
            select_sql.conditions, select_sql.condition_num, filter_stmt);
   if (rc != RC::SUCCESS) {
     LOG_WARN("cannot construct filter stmt");

@@ -259,35 +259,38 @@ void print_tuple_header(std::ostream &os, Operator &oper)
     if (i != 0) {
       os << " | ";
     }
-    switch (cell_spec->agg_type) {
-      case AGG_AVG:
-        os << "AVG(";
-        break;
-      case AGG_MIN:
-        os << "MIN(";
-        break;
-      case AGG_MAX:
-        os << "MAX(";
-        break;
-      case AGG_COUNT:
-        os << "COUNT(";
-        break;
-      case AGG_SUM:
-        os << "SUM(";
-        break;
-      default:
-        break;
-    }
-    if (cell_spec->alias()) {
-//      os << cell_spec->table_alias() << ".";
-      os << cell_spec->alias();
-    }
+    if (cell_spec->p_total_alias != nullptr) {
+      os << cell_spec->p_total_alias;
+    } else {
+      switch (cell_spec->agg_type) {
+        case AGG_AVG:
+          os << "AVG(";
+          break;
+        case AGG_MIN:
+          os << "MIN(";
+          break;
+        case AGG_MAX:
+          os << "MAX(";
+          break;
+        case AGG_COUNT:
+          os << "COUNT(";
+          break;
+        case AGG_SUM:
+          os << "SUM(";
+          break;
+        default:
+          break;
+      }
+      if (cell_spec->alias()) {
+        //      os << cell_spec->table_alias() << ".";
+        os << cell_spec->alias();
+      }
 
-    if (cell_spec->agg_type != AGG_NONE) {
-      os << ")";
+      if (cell_spec->agg_type != AGG_NONE) {
+        os << ")";
+      }
     }
   }
-
   if (cell_num > 0) {
     os << '\n';
   }
@@ -303,33 +306,39 @@ void print_tuple_header_multi_table(std::ostream &os, Operator &oper)
     if (i != 0) {
       os << " | ";
     }
-    switch (cell_spec->agg_type) {
-      case AGG_AVG:
-        os << "AVG(";
-        break;
-      case AGG_MIN:
-        os << "MIN(";
-        break;
-      case AGG_MAX:
-        os << "MAX(";
-        break;
-      case AGG_COUNT:
-        os << "COUNT(";
-        break;
-      case AGG_SUM:
-        os << "SUM(";
-        break;
-      default:
-        break;
-    }
-    if (cell_spec->alias()) {
-      if (cell_spec->table_alias() != nullptr) {
-        os << cell_spec->table_alias() << ".";
+    if (cell_spec->p_total_alias != nullptr) {
+      os << cell_spec->p_total_alias;
+    } else {
+      switch (cell_spec->agg_type) {
+        case AGG_AVG:
+          os << "AVG(";
+          break;
+        case AGG_MIN:
+          os << "MIN(";
+          break;
+        case AGG_MAX:
+          os << "MAX(";
+          break;
+        case AGG_COUNT:
+          os << "COUNT(";
+          break;
+        case AGG_SUM:
+          os << "SUM(";
+          break;
+        default:
+          break;
       }
-      os << cell_spec->alias();
-    }
-    if (cell_spec->agg_type != AGG_NONE) {
-      os << ")";
+      if (cell_spec->alias()) {
+        if (cell_spec->p_rel_alias != nullptr) {
+          os << cell_spec->p_rel_alias << ".";
+        } else if (cell_spec->table_alias() != nullptr) {
+          os << cell_spec->table_alias() << ".";
+        }
+        os << cell_spec->alias();
+      }
+      if (cell_spec->agg_type != AGG_NONE) {
+        os << ")";
+      }
     }
   }
 
@@ -482,30 +491,30 @@ IndexScanOperator *try_to_create_index_scan_operator(FilterStmt *filter_stmt)
   return oper;
 }
 
-RC add_projection(Db * db, std::vector<Table *> & tables, size_t attr_num, RelAttr * attributes, ProjectOperator *oper) {
+RC add_projection(Db * db, std::vector<Table *> & tables, size_t attr_num, RelAttr * attributes, ProjectOperator *oper, std::unordered_map<std::string, char *> & rel_alias) {
   for (size_t i = 0; i < attr_num; i++) {
     auto & attr = attributes[i];
-    // select *
     if (attr.is_exp) {
       auto vec = parse_expression(attr.expression);
       for (auto & item : vec) {
         if (item->type == ATTR_ET) {
           Table * table = item->rel_attr->relation_name == nullptr ? tables[0] : db->find_table(item->rel_attr->relation_name);
-          oper->add_projection(table, table->table_meta().field(item->rel_attr->attribute_name), item->rel_attr->aggType);
+          oper->add_projection(table, table->table_meta().field(item->rel_attr->attribute_name), item->rel_attr->aggType, rel_alias[std::string(table->name())], nullptr);
         }
       }
       continue;
     }
+    // select *
     if (attr.relation_name == nullptr && 0 == strcmp(attr.attribute_name, "*")) {
       if (attr.aggType == AGG_COUNT) {
-        oper->add_projection(nullptr, "*", AGG_COUNT);
+        oper->add_projection(nullptr, "*", AGG_COUNT, nullptr, attr.alias_name);
       } else if (attr.aggType == AGG_NONE) {
         for (int j = (int)tables.size() - 1; j >= 0; j--) {
           auto &table = tables[j];
           const TableMeta &table_meta = table->table_meta();
           const int field_num = table_meta.field_num();
           for (int k = table_meta.sys_field_num(); k < field_num; k++) {
-            oper->add_projection(table, table_meta.field(k), attr.aggType);
+            oper->add_projection(table, table_meta.field(k), attr.aggType, rel_alias[std::string(table->name())], nullptr);
           }
         }
       } else {
@@ -513,19 +522,27 @@ RC add_projection(Db * db, std::vector<Table *> & tables, size_t attr_num, RelAt
       }
     } else {
       Table * table = attr.relation_name == nullptr ? tables[0] : db->find_table(attr.relation_name);
+      if (table == nullptr) {
+        for (auto & item : rel_alias) {
+          if (item.second != nullptr && 0 == strcmp(attr.relation_name, item.second)) {
+            table = db->find_table(item.first.c_str());
+            break;
+          }
+        }
+      }
       // select id.*
       if (0 == strcmp(attr.attribute_name, "*")) {
         const TableMeta &table_meta = table->table_meta();
         const int field_num = table_meta.field_num();
         for (int j = table_meta.sys_field_num(); j < field_num; j++) {
-          oper->add_projection(table, table_meta.field(j), attr.aggType);
+          oper->add_projection(table, table_meta.field(j), attr.aggType, rel_alias[std::string(table->name())], nullptr);
         }
       } else {
         // select id.id
         if (table->table_meta().field(attr.attribute_name) == nullptr) {
           return RC::GENERIC_ERROR;
         }
-        oper->add_projection(table, table->table_meta().field(attr.attribute_name), attr.aggType);
+        oper->add_projection(table, table->table_meta().field(attr.attribute_name), attr.aggType, rel_alias[std::string(table->name())], attr.alias_name);
       }
     }
   }
@@ -597,7 +614,7 @@ RC ExecuteStage::do_select(SQLStageEvent *sql_event)
     scan_opers.push_back(new TableScanOperator(table));
   }
 
-  SubqueryPredicateOperator pred_oper(selects.conditions, selects.condition_num, tables[0]->name(), db);
+  SubqueryPredicateOperator pred_oper(selects.conditions, selects.condition_num, selects.relations[0], selects.relations_alias[0], db);
   pred_oper.add_child(scan_opers[0]);
 
   TablesJoinPredOperator join_pred_oper(scan_opers, select_stmt->filter_stmt(),
@@ -610,9 +627,22 @@ RC ExecuteStage::do_select(SQLStageEvent *sql_event)
     order_by_oper.add_child(&join_pred_oper);
   }
 
+  for (int i = 0; i < (int)selects.relation_num - 1; i++) {
+    for (int j = i + 1; j < (int)selects.relation_num; j++) {
+      if (selects.relations_alias[i] != nullptr && selects.relations_alias[j] != nullptr
+          && strcmp(selects.relations_alias[i], selects.relations_alias[j]) == 0) {
+        session_event->set_response("FAILURE\n");
+        return RC::GENERIC_ERROR;
+      }
+    }
+  }
+  std::unordered_map<std::string, char *> rel_alias;
+  for (size_t i = 0; i < selects.relation_num; i++) {
+    rel_alias[std::string(selects.relations[i])] = selects.relations_alias[i];
+  }
   ProjectOperator project_oper;
   project_oper.add_child(&order_by_oper);
-  rc = add_projection(db, tables, selects.attr_num, selects.attributes, &project_oper);
+  rc = add_projection(db, tables, selects.attr_num, selects.attributes, &project_oper, rel_alias);
   if (rc != SUCCESS) {
     session_event->set_response("FAILURE\n");
     return rc;

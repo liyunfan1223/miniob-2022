@@ -93,7 +93,7 @@ QUOTE            [\'\"]
 [Ee][Xx][Ii][Ss][Tt][Ss]                             RETURN_TOKEN(EXISTS);
 [Ii][Ss]                                             RETURN_TOKEN(IS);
 [Oo][Rr]                                             RETURN_TOKEN(OR);
-
+[Aa][Ss]                                             RETURN_TOKEN(AS);
 
 
 {ID}                                                 yylval->string=strdup(yytext); RETURN_TOKEN(ID);

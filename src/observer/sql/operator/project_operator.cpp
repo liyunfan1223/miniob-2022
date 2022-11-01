@@ -61,7 +61,7 @@ void ProjectOperator::add_projection(const Table *table, const FieldMeta *field_
   tuple_.add_cell_spec(spec);
 }
 
-void ProjectOperator::add_projection(const Table *table, const FieldMeta *field_meta, AggType agg_type)
+void ProjectOperator::add_projection(const Table *table, const FieldMeta *field_meta, AggType agg_type, char * p_alias, char * p_total_alias)
 {
   // 对单表来说，展示的(alias) 字段总是字段名称，
   // 对多表查询来说，展示的alias 需要带表名字
@@ -70,6 +70,8 @@ void ProjectOperator::add_projection(const Table *table, const FieldMeta *field_
   spec->set_alias(field_meta->name());
   spec->agg_type = agg_type;
   spec->attr_type = field_meta->type();
+  spec->p_rel_alias = p_alias;
+  spec->p_total_alias = p_total_alias;
   tuple_.add_cell_spec(spec);
 }
 
@@ -81,6 +83,19 @@ void ProjectOperator::add_projection(const char *table_name, const char *field_m
   spec->set_table_alias(table_name);
   spec->set_alias(field_meta_name);
   spec->agg_type = agg_type;
+  tuple_.add_cell_spec(spec);
+}
+
+void ProjectOperator::add_projection(const char *table_name, const char *field_meta_name, AggType agg_type, char * p_alias, char * p_total_alias)
+{
+  // 对单表来说，展示的(alias) 字段总是字段名称，
+  // 对多表查询来说，展示的alias 需要带表名字
+  TupleCellSpec *spec = new TupleCellSpec();
+  spec->set_table_alias(table_name);
+  spec->set_alias(field_meta_name);
+  spec->agg_type = agg_type;
+  spec->p_rel_alias = p_alias;
+  spec->p_total_alias = p_total_alias;
   tuple_.add_cell_spec(spec);
 }
 

@@ -777,8 +777,9 @@ RC Table::update_record(Trx *trx, Record *record, std::vector<const FieldMeta *>
     if (value.is_sub_select) {
       std::vector<Tuple *> r_tuples;
       std::vector<const char *> r_rels;
+      std::vector<const char *> r_alias_rels;
       TupleCell ret_cell;
-      if (SubqueryPredicateOperator::execute_sub_query(r_tuples, r_rels, value.selects, ret_cell, db) != SUCCESS) {
+      if (SubqueryPredicateOperator::execute_sub_query(r_tuples, r_rels, r_alias_rels, value.selects, ret_cell, db) != SUCCESS) {
         return RC::GENERIC_ERROR;
       }
       if (ret_cell.is_set) {

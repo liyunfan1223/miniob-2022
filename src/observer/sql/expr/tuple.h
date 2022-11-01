@@ -68,6 +68,8 @@ public:
   AggType agg_type = AGG_NONE;
   AttrType attr_type = UNDEFINED;
   int is_exp = 0;
+  const char * p_rel_alias = nullptr;
+  const char * p_total_alias = nullptr;
 private:
   const char *table_alias_ = nullptr;
   const char *alias_ = nullptr;

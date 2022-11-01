@@ -25,14 +25,25 @@ public:
   SubqueryPredicateOperator(Condition *conditions, size_t condition_num, const char * rel_name, Db * db)
       : conditions_(conditions), condition_num_(condition_num), rel_name_(rel_name), db_(db)
   {
-
   }
-  SubqueryPredicateOperator(Condition *conditions, size_t condition_num, const char * rel_name, Db * db,
-      std::vector<Tuple *> parent_tuples, std::vector<const char *> parent_rels)
-      : conditions_(conditions), condition_num_(condition_num),
-        parent_tuples_(parent_tuples), parent_rel_(parent_rels), rel_name_(rel_name), db_(db)
-  {
 
+  SubqueryPredicateOperator(Condition *conditions, size_t condition_num, const char * rel_name, const char * rel_alias_name, Db * db)
+      : conditions_(conditions), condition_num_(condition_num), rel_name_(rel_name), rel_alias_name_(rel_alias_name), db_(db)
+  {
+  }
+
+  SubqueryPredicateOperator(Condition *conditions, size_t condition_num, const char * rel_name, Db * db,
+      std::vector<Tuple *> parent_tuples, std::vector<const char *> parent_rels, std::vector<const char *> parent_alias_rels)
+      : conditions_(conditions), condition_num_(condition_num),
+        parent_tuples_(parent_tuples), parent_rel_(parent_rels), parent_alias_rel_(parent_alias_rels), rel_name_(rel_name), db_(db)
+  {
+  }
+
+  SubqueryPredicateOperator(Condition *conditions, size_t condition_num, const char * rel_name, const char * rel_alias_name, Db * db,
+      std::vector<Tuple *> parent_tuples, std::vector<const char *> parent_rels, std::vector<const char *> parent_alias_rels)
+      : conditions_(conditions), condition_num_(condition_num),
+        parent_tuples_(parent_tuples), parent_rel_(parent_rels), parent_alias_rel_(parent_alias_rels), rel_name_(rel_name), rel_alias_name_(rel_alias_name), db_(db)
+  {
   }
   virtual ~SubqueryPredicateOperator() = default;
 
@@ -44,8 +55,8 @@ public:
   //int tuple_cell_num() const override;
   //RC tuple_cell_spec_at(int index, TupleCellSpec &spec) const override;
   static RC execute_sub_query(std::vector<Tuple *> & parent_tuples,
-      std::vector<const char *> & parent_rels, Selects * selects, TupleCell & ret_cell, Db * db_);
-  static RC add_projection(Db * db, std::vector<Table *> & tables, size_t attr_num, RelAttr * attributes, ProjectOperator *oper);
+  std::vector<const char *> & parent_rels, std::vector<const char *> &parent_alias_rels, Selects * selects, TupleCell & ret_cell, Db * db_);
+  static RC add_projection(Db * db, std::vector<Table *> & tables, size_t attr_num, RelAttr * attributes, ProjectOperator *oper, std::unordered_map<std::string, char *> & rel_alias);
   static RC check_attr_in_group(size_t attr_num, RelAttr * attrs, size_t group_num, GroupAttr * groups);
   static RC replace_exists(Selects & selects);
 private:
@@ -58,6 +69,8 @@ private:
   size_t condition_num_;
   std::vector<Tuple *> parent_tuples_;
   std::vector<const char *> parent_rel_;
+  std::vector<const char *> parent_alias_rel_;
   const char * rel_name_;
+  const char * rel_alias_name_;
   Db * db_ = nullptr;
 };

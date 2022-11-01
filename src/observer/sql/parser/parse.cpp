@@ -35,6 +35,24 @@ void relation_attr_init(RelAttr *relation_attr, const char *relation_name, const
   relation_attr->aggType = AGG_NONE;
 }
 
+void relation_attr_alias_init(RelAttr *relation_attr, const char *relation_name, const char *attribute_name, const char * alias)
+{
+  if (relation_name != nullptr) {
+    relation_attr->relation_name = strdup(relation_name);
+  } else {
+    relation_attr->relation_name = nullptr;
+  }
+  relation_attr->attribute_name = strdup(attribute_name);
+  relation_attr->is_agg = false;
+  relation_attr->is_exp = 0;
+  relation_attr->aggType = AGG_NONE;
+  if (alias != nullptr) {
+    relation_attr->alias_name = strdup(alias);
+  } else {
+    relation_attr->alias_name = nullptr;
+  }
+}
+
 void relation_attr_exp_init(RelAttr *relation_attr, const char *expression)
 {
   relation_attr->relation_name = nullptr;
@@ -56,6 +74,24 @@ void relation_attr_aggr_init(
   relation_attr->is_agg = true;
   relation_attr->is_exp = 0;
   relation_attr->aggType = aggrType;
+}
+
+void relation_attr_aggr_alias_init(RelAttr *relation_attr, const char *relation_name, const char *attribute_name, AggType aggrType, const char * alias)
+{
+  if (relation_name != nullptr) {
+    relation_attr->relation_name = strdup(relation_name);
+  } else {
+    relation_attr->relation_name = nullptr;
+  }
+  relation_attr->attribute_name = strdup(attribute_name);
+  relation_attr->is_agg = true;
+  relation_attr->is_exp = 0;
+  relation_attr->aggType = aggrType;
+  if (alias != nullptr) {
+    relation_attr->alias_name = strdup(alias);
+  } else {
+    relation_attr->alias_name = nullptr;
+  }
 }
 
 void relation_attr_destroy(RelAttr *relation_attr)
@@ -271,6 +307,17 @@ void selects_append_relation(Selects *selects, const char *relation_name)
 {
   selects->relations[selects->relation_num++] = strdup(relation_name);
 }
+
+void selects_append_relation_alias(Selects *selects, const char *relation_name, const char *relation_alias_name)
+{
+  selects->relations[selects->relation_num] = strdup(relation_name);
+  if (relation_alias_name != nullptr) {
+    selects->relations_alias[selects->relation_num++] = strdup(relation_alias_name);
+  } else {
+    selects->relations_alias[selects->relation_num++] = nullptr;
+  }
+}
+
 void selects_append_condition(Selects *selects, Condition * condition)
 {
   selects->conditions[selects->condition_num++] = *condition;

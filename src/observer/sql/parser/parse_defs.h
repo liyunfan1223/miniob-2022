@@ -60,6 +60,7 @@ typedef enum {
 typedef struct _RelAttr{
   char *relation_name;   // relation name (may be NULL) 表名
   char *attribute_name;  // attribute name              属性名
+  char *alias_name;
   int is_agg;
   AggType aggType;
   int is_exp;
@@ -150,6 +151,7 @@ typedef struct _Selects {
   RelAttr attributes[MAX_NUM];    // attrs in Select clause
   size_t relation_num;            // Length of relations in Fro clause
   char *relations[MAX_NUM];       // relations in From clause
+  char *relations_alias[MAX_NUM];
   size_t condition_num;           // Length of conditions in Where clause
   Condition conditions[MAX_NUM];  // conditions in Where clause
   size_t group_num;

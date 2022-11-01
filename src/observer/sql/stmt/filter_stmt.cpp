@@ -28,6 +28,7 @@ FilterStmt::~FilterStmt()
 }
 
 RC FilterStmt::create(Db *db, Table *default_table, std::unordered_map<std::string, Table *> *tables,
+              std::unordered_map<std::string, char *> *alias,
 		      const Condition *conditions, int condition_num,
 		      FilterStmt *&stmt)
 {
@@ -37,7 +38,7 @@ RC FilterStmt::create(Db *db, Table *default_table, std::unordered_map<std::stri
   FilterStmt *tmp_stmt = new FilterStmt();
   for (int i = 0; i < condition_num; i++) {
     FilterUnit *filter_unit = nullptr;
-    rc = create_filter_unit(db, default_table, tables, conditions[i], filter_unit);
+    rc = create_filter_unit(db, default_table, tables, alias, conditions[i], filter_unit);
     if (rc != RC::SUCCESS) {
       delete tmp_stmt;
       LOG_WARN("failed to create filter unit. condition index=%d", i);
@@ -51,6 +52,7 @@ RC FilterStmt::create(Db *db, Table *default_table, std::unordered_map<std::stri
 }
 
 RC get_table_and_field(Db *db, Table *default_table, std::unordered_map<std::string, Table *> *tables,
+    std::unordered_map<std::string, char *> *alias,
 		       const RelAttr &attr, Table *&table, const FieldMeta *&field)
 {
   if (common::is_blank(attr.relation_name)) {
@@ -62,6 +64,13 @@ RC get_table_and_field(Db *db, Table *default_table, std::unordered_map<std::str
     }
   } else {
     table = db->find_table(attr.relation_name);
+  }
+  if (nullptr == table && alias != nullptr) {
+    for (auto & item : *alias) {
+        if (item.second != nullptr && 0 == strcmp(item.second, attr.relation_name)) {
+          table = db->find_table(item.first.c_str());
+        }
+    }
   }
   if (nullptr == table) {
     LOG_WARN("No such table: attr.relation_name: %s", attr.relation_name);
@@ -99,7 +108,7 @@ bool FilterStmt::check_date(int val)
 }
 
 RC FilterStmt::create_filter_unit(Db *db, Table *default_table, std::unordered_map<std::string, Table *> *tables,
-				  const Condition &condition, FilterUnit *&filter_unit)
+    std::unordered_map<std::string, char *> *alias, const Condition &condition, FilterUnit *&filter_unit)
 {
   RC rc = RC::SUCCESS;
   
@@ -117,7 +126,7 @@ RC FilterStmt::create_filter_unit(Db *db, Table *default_table, std::unordered_m
   if (condition.left_is_attr) {
     Table *table = nullptr;
     const FieldMeta *field = nullptr;
-    rc = get_table_and_field(db, default_table, tables, condition.left_attr, table, field);
+    rc = get_table_and_field(db, default_table, tables, alias, condition.left_attr, table, field);
     if (rc != RC::SUCCESS) {
       LOG_WARN("cannot find attr");
       return rc;
@@ -139,7 +148,7 @@ RC FilterStmt::create_filter_unit(Db *db, Table *default_table, std::unordered_m
   if (condition.right_is_attr) {
     Table *table = nullptr;
     const FieldMeta *field = nullptr;
-    rc = get_table_and_field(db, default_table, tables, condition.right_attr, table, field);  
+    rc = get_table_and_field(db, default_table, tables, alias, condition.right_attr, table, field);
     if (rc != RC::SUCCESS) {
       LOG_WARN("cannot find attr");
       delete left;
