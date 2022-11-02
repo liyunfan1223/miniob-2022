@@ -70,6 +70,9 @@ public:
   int is_exp = 0;
   const char * p_rel_alias = nullptr;
   const char * p_total_alias = nullptr;
+  FuncType func_type = FUNC_NONE;
+  int round_func_param;
+  char * date_func_param;
 private:
   const char *table_alias_ = nullptr;
   const char *alias_ = nullptr;
@@ -855,9 +858,6 @@ public:
   RC find_cell(const char *table_name, const char *field_name, TupleCell &cell) const override
   {
     for (size_t i = 0; i < speces_.size(); ++i) {
-      //      const FieldExpr * field_expr = (const FieldExpr *)speces_[i]->expression();
-      //      auto spece_table_name = speces_[i]-
-      //      const Field &exprField = field_expr->field();
       if ( ( table_name == nullptr ||
               ( table_name != nullptr && speces_[i]->table_alias() != nullptr && 0 == strcmp(table_name, speces_[i]->table_alias()) )
                   ) && (0 == strcmp(field_name, speces_[i]->alias())) ) {
@@ -866,41 +866,130 @@ public:
     }
     return RC::NOTFOUND;
   }
-//  RC find_cell(const char *table_name, const char *field_name, TupleCell &cell) const override
-//  {
-//    for (size_t i = 0; i < speces_.size(); ++i) {
-//      //      const FieldExpr * field_expr = (const FieldExpr *)speces_[i]->expression();
-//      //      auto spece_table_name = speces_[i]-
-//      //      const Field &exprField = field_expr->field();
-//      if ( ( table_name == nullptr ||
-//              ( table_name != nullptr && speces_[i]->table_alias() != nullptr && 0 == strcmp(table_name, speces_[i]->table_alias()) )
-//                  ) && (0 == strcmp(field_name, speces_[i]->alias())) ) {
-//        return cell_at(i, cell);
-//      }
-//    }
-//    return RC::NOTFOUND;
-//  }
+
   RC cell_spec_at(int index, const TupleCellSpec *&spec) const override
   {
     spec = speces_[index];
     return SUCCESS;
   }
+
+  void get_tuple_cell_for_func(TupleCellSpec * spece, Tuple * tuple, TupleCell & tuple_cell)
+  {
+    TupleCell tmp_cell;
+    tuple->find_cell_agg(spece->table_alias(), spece->alias(), tmp_cell, spece->agg_type);
+    switch (spece->func_type) {
+      case FUNC_LENGTH: {
+        if (tmp_cell.attr_type() != CHARS) {
+          throw 0;
+        }
+//        assert(tmp_cell.attr_type() == CHARS);
+        int length = strlen(tmp_cell.data());
+        tuple_cell.set_type(INTS);
+        tuple_cell.set_data((char *)new int(length));
+      } break;
+      case FUNC_ROUND: {
+        if (tmp_cell.attr_type() != FLOATS) {
+          throw 0;
+        }
+        float val;
+        if (tmp_cell.attr_type() == INTS) {
+          val = *(int *)tmp_cell.data();
+        } else if (tmp_cell.attr_type() == FLOATS) {
+          val = *(float *)tmp_cell.data();
+        }
+        int digit = spece->round_func_param;
+        int time = 1;
+        for (int i = 1; i <= digit; i++) time *= 10;
+        float data = val > 0 ? (int)(val * time + 0.5) / (float)time :  (int)(val * time - 0.5) / (float)time;
+        tuple_cell.set_type(FLOATS);
+        tuple_cell.set_data((char *)new float(data));
+      } break;
+      case FUNC_DATE: {
+        if (tmp_cell.attr_type() != DATES) {
+          throw 0;
+        }
+        if (spece->date_func_param == nullptr) {
+          throw 0;
+        }
+        char tmp[100];
+        assert(tmp_cell.attr_type() == DATES);
+        int y, m, d, val;
+        val = *(int *)tmp_cell.data();
+        y = val / 10000;
+        m = val % 10000 / 100;
+        d = val % 100;
+        char * pattern = strdup(spece->date_func_param);
+        int pattern_len = strlen(pattern);
+        std::string res = "";
+        for (int j = 0; j < pattern_len; j++) {
+          if (pattern[j] != '%') {
+            res += pattern[j];
+          } else {
+            j++;
+            switch (pattern[j]) {
+              case 'Y': {
+                sprintf(tmp, "%d", y);
+                res += std::string(tmp);
+              } break;
+              case 'y': {
+                sprintf(tmp, "%02d", y % 100);
+                res += std::string(tmp);
+              } break;
+              case 'M': {
+                std::vector<std::string> month = {"January", "February", "March", "April", "May", "June", "July",
+                    "August", "September", "October", "November", "December"};
+                res += month[m - 1];
+              } break;
+              case 'm': {
+                sprintf(tmp, "%02d", m);
+                res += std::string(tmp);
+              } break;
+              case 'D': {
+                std::string suffix = "";
+                if (d == 1 || d == 21 || d == 31) {
+                  suffix = "st";
+                } else if (d == 2 || d == 22) {
+                  suffix = "ed";
+                } else if (d == 3 || d == 23) {
+                  suffix = "rd";
+                } else suffix = "th";
+                sprintf(tmp, "%d", d);
+                res += std::string(tmp) + suffix;
+              } break;
+              case 'd': {
+                sprintf(tmp, "%02d", d);
+                res += std::string(tmp);
+              } break;
+              default: {
+                res += pattern[j];
+              }
+            }
+          }
+        }
+        tuple_cell.set_type(CHARS);
+        tuple_cell.set_data(strdup(res.c_str()));
+        tuple_cell.set_length(strlen(res.c_str()));
+      }
+      default: {
+
+      } break;
+    }
+  }
+
   RC set_tuple_cells(int idx, Tuple * child_tuple) {
-//    JoinTuple * child_tuple = (JoinTuple *)tuple;
     auto & spece = speces_[idx];
-//    AggType agg_type = spece->agg_type;
-//    AttrType attr_type = spece->attr_type;
     TupleCell tupleCell;
     if (spece->is_exp) {
       std::vector<ExpElement *> vec = parse_expression(spece->alias());
       get_tuple_cell_for_exp(vec, *child_tuple, tupleCell);
+    } else if (spece->func_type != FUNC_NONE) {
+        get_tuple_cell_for_func(spece, child_tuple, tupleCell);
     } else {
         child_tuple->find_cell_agg(spece->table_alias(), spece->alias(), tupleCell, spece->agg_type);
     }
     tuple_cells_.push_back(tupleCell);
     return SUCCESS;
   }
-//  Tuple * child_tuple;
   std::vector<TupleCellSpec *> speces_;
   std::vector<TupleCell> tuple_cells_;
 };

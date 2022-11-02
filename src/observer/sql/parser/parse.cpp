@@ -33,6 +33,7 @@ void relation_attr_init(RelAttr *relation_attr, const char *relation_name, const
   relation_attr->is_agg = false;
   relation_attr->is_exp = 0;
   relation_attr->aggType = AGG_NONE;
+  relation_attr->func_type = FUNC_NONE;
 }
 
 void relation_attr_alias_init(RelAttr *relation_attr, const char *relation_name, const char *attribute_name, const char * alias)
@@ -46,6 +47,7 @@ void relation_attr_alias_init(RelAttr *relation_attr, const char *relation_name,
   relation_attr->is_agg = false;
   relation_attr->is_exp = 0;
   relation_attr->aggType = AGG_NONE;
+  relation_attr->func_type = FUNC_NONE;
   if (alias != nullptr) {
     relation_attr->alias_name = strdup(alias);
   } else {
@@ -60,6 +62,7 @@ void relation_attr_exp_init(RelAttr *relation_attr, const char *expression)
 
   relation_attr->is_exp = 1;
   relation_attr->expression = strdup(expression);
+  relation_attr->func_type = FUNC_NONE;
 }
 
 void relation_attr_aggr_init(
@@ -74,6 +77,7 @@ void relation_attr_aggr_init(
   relation_attr->is_agg = true;
   relation_attr->is_exp = 0;
   relation_attr->aggType = aggrType;
+  relation_attr->func_type = FUNC_NONE;
 }
 
 void relation_attr_aggr_alias_init(RelAttr *relation_attr, const char *relation_name, const char *attribute_name, AggType aggrType, const char * alias)
@@ -87,6 +91,48 @@ void relation_attr_aggr_alias_init(RelAttr *relation_attr, const char *relation_
   relation_attr->is_agg = true;
   relation_attr->is_exp = 0;
   relation_attr->aggType = aggrType;
+  relation_attr->func_type = FUNC_NONE;
+  if (alias != nullptr) {
+    relation_attr->alias_name = strdup(alias);
+  } else {
+    relation_attr->alias_name = nullptr;
+  }
+}
+
+void relation_attr_func_alias_init(RelAttr *relation_attr, const char *relation_name, const char *attribute_name, FuncType func_type, const char * alias,
+    int round_func_param, char * date_func_param)
+{
+  if (relation_name != nullptr) {
+    relation_attr->relation_name = strdup(relation_name);
+  } else {
+    relation_attr->relation_name = nullptr;
+  }
+  relation_attr->attribute_name = strdup(attribute_name);
+  relation_attr->is_agg = true;
+  relation_attr->is_exp = 0;
+  relation_attr->aggType = AGG_NONE;
+  relation_attr->func_type = func_type;
+  relation_attr->round_func_param = round_func_param;
+  relation_attr->date_func_param = date_func_param;
+  if (alias != nullptr) {
+    relation_attr->alias_name = strdup(alias);
+  } else {
+    relation_attr->alias_name = nullptr;
+  }
+}
+
+void relation_attr_nontable_func_alias_init(RelAttr *relation_attr, FuncType func_type, const char * alias,
+    int round_func_param, char * date_func_param, Value * value)
+{
+  relation_attr->relation_name = nullptr;
+  relation_attr->attribute_name = nullptr;
+  relation_attr->is_agg = true;
+  relation_attr->is_exp = 0;
+  relation_attr->aggType = AGG_NONE;
+  relation_attr->func_type = func_type;
+  relation_attr->round_func_param = round_func_param;
+  relation_attr->date_func_param = date_func_param;
+  relation_attr->non_table_value = new Value(*value);
   if (alias != nullptr) {
     relation_attr->alias_name = strdup(alias);
   } else {
@@ -505,10 +551,11 @@ void create_index_init(
 }
 
 void create_index_multi_rel_init(
-    CreateIndex *create_index, const char *index_name, const char *relation_name)
+    CreateIndex *create_index, const char *index_name, const char *relation_name, size_t is_unique)
 {
   create_index->index_name = strdup(index_name);
   create_index->relation_name = strdup(relation_name);
+  create_index->is_unique = is_unique;
 }
 
 void create_index_append_attr_name(CreateIndex *create_index, const char *attr_name)
@@ -599,7 +646,7 @@ Query *query_create()
 void query_reset(Query *query)
 {
   switch (query->flag) {
-    case SCF_SELECT: {
+    case SCF_SELECT: case SCF_SELECT_NONTABLE: {
       selects_destroy(&query->sstr.selection);
     } break;
     case SCF_INSERT: {

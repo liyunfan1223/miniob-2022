@@ -34,9 +34,6 @@ static void wildcard_fields(Table *table, std::vector<Field> &field_metas)
   for (int i = table_meta.sys_field_num(); i < field_num; i++) {
     field_metas.push_back(Field(table, table_meta.field(i)));
   }
-//  for (int i = field_num - 1; i >= table_meta.sys_field_num(); i--) {
-//    field_metas.push_back(Field(table, table_meta.field(i)));
-//  }
 }
 
 RC SelectStmt::create(Db *db, const Selects &select_sql, Stmt *&stmt)

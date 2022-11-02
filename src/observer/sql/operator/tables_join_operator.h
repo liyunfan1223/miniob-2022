@@ -21,8 +21,9 @@ public:
 //  }
 
   TablesJoinPredOperator(std::vector<TableScanOperator*> scan_opers, FilterStmt *filter_stmt,
-      Condition *conditions, size_t condition_num)
-      :scan_opers_(scan_opers), filter_stmt_(filter_stmt), conditions_(conditions), condition_num_(condition_num)
+      Condition *conditions, size_t condition_num, std::unordered_map<std::string, char *> rel_alias)
+      :scan_opers_(scan_opers), filter_stmt_(filter_stmt), conditions_(conditions), condition_num_(condition_num),
+        rel_alias_(rel_alias)
   {
     current_index_ = 0;
     field_length_ = 0;
@@ -68,4 +69,5 @@ private:
   std::vector<TupleCellSpec *> speces_;
   Condition *conditions_;
   size_t condition_num_;
+  std::unordered_map<std::string, char *> rel_alias_;
 };

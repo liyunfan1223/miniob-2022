@@ -48,6 +48,7 @@ protected:
   RC do_show_index(SQLStageEvent *sql_event);
   RC do_desc_table(SQLStageEvent *sql_event);
   RC do_select(SQLStageEvent *sql_event);
+  RC do_select_nontable(SQLStageEvent *sql_event);
   RC do_insert(SQLStageEvent *sql_event);
   RC do_delete(SQLStageEvent *sql_event);
 

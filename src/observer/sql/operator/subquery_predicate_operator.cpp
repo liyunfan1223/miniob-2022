@@ -240,12 +240,26 @@ bool SubqueryPredicateOperator::do_predicate_by_cond(Tuple &tuple)
 
     if (cond.left_is_attr) {
       RelAttr & relAttr = cond.left_attr;
-      if (relAttr.relation_name == nullptr || strcmp(rel_name_, relAttr.relation_name) == 0 || rel_alias_name_ != nullptr && strcmp(rel_alias_name_, relAttr.relation_name) == 0) {
+      if (relAttr.relation_name == nullptr || strcmp(rel_name_, relAttr.relation_name) == 0 || (rel_alias_name_ != nullptr && strcmp(rel_alias_name_, relAttr.relation_name) == 0)) {
         tuple.find_cell(rel_name_, relAttr.attribute_name, tc_left);
+        if (relAttr.func_type == FUNC_LENGTH) {
+          if (tc_left.attr_type() != CHARS) {
+            throw 0;
+          }
+          tc_left.set_type(INTS);
+          tc_left.set_data((char *)new int(strlen(tc_left.data())));
+        }
       } else {
         for (int i = 0; i < (int)parent_rel_.size(); i++) {
-          if (strcmp(relAttr.relation_name, parent_rel_[i]) == 0 || (parent_alias_rel_[i] != nullptr && strcmp(relAttr.relation_name, parent_alias_rel_[i]) == 0)) {
+          if (strcmp(relAttr.relation_name, parent_rel_[i]) == 0 || ((parent_alias_rel_[i] != nullptr && strcmp(relAttr.relation_name, parent_alias_rel_[i]) == 0))) {
             parent_tuples_[i]->find_cell(parent_rel_[i], relAttr.attribute_name, tc_left);
+            if (relAttr.func_type == FUNC_LENGTH) {
+              if (tc_left.attr_type() != CHARS) {
+                throw 0;
+              }
+              tc_left.set_type(INTS);
+              tc_left.set_data((char *)new int(strlen(tc_left.data())));
+            }
             break;
           }
         }
@@ -282,12 +296,26 @@ bool SubqueryPredicateOperator::do_predicate_by_cond(Tuple &tuple)
 
     if (cond.right_is_attr) {
       RelAttr & relAttr = cond.right_attr;
-      if (relAttr.relation_name == nullptr || strcmp(rel_name_, relAttr.relation_name) == 0 || rel_alias_name_ != nullptr && strcmp(rel_alias_name_, relAttr.relation_name) == 0) {
+      if (relAttr.relation_name == nullptr || strcmp(rel_name_, relAttr.relation_name) == 0 || (rel_alias_name_ != nullptr && strcmp(rel_alias_name_, relAttr.relation_name) == 0)) {
         tuple.find_cell(rel_name_, relAttr.attribute_name, tc_right);
+        if (relAttr.func_type == FUNC_LENGTH) {
+          if (tc_right.attr_type() != CHARS) {
+            throw 0;
+          }
+          tc_right.set_type(INTS);
+          tc_right.set_data((char *)new int(strlen(tc_right.data())));
+        }
       } else {
         for (int j = 0; j < (int)parent_rel_.size(); j++) {
           if (strcmp(relAttr.relation_name, parent_rel_[j]) == 0 || (parent_alias_rel_[j] != nullptr && strcmp(relAttr.relation_name, parent_alias_rel_[j]) == 0)) {
             parent_tuples_[j]->find_cell(parent_rel_[j], relAttr.attribute_name, tc_right);
+            if (relAttr.func_type == FUNC_LENGTH) {
+              if (tc_left.attr_type() != CHARS) {
+                throw 0;
+              }
+              tc_right.set_type(INTS);
+              tc_right.set_data((char *)new int(strlen(tc_right.data())));
+            }
             break;
           }
         }

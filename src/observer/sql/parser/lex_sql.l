@@ -94,7 +94,10 @@ QUOTE            [\'\"]
 [Ii][Ss]                                             RETURN_TOKEN(IS);
 [Oo][Rr]                                             RETURN_TOKEN(OR);
 [Aa][Ss]                                             RETURN_TOKEN(AS);
-
+[Ll][Ee][Nn][Gg][Tt][Hh]                             RETURN_TOKEN(LENGTH);
+[Rr][Oo][Uu][Nn][Dd]                                 RETURN_TOKEN(ROUND);
+[Dd][Aa][Tt][Ee][_][Ff][Oo][Rr][Mm][Aa][Tt]          RETURN_TOKEN(DATE_FORMAT);
+[Uu][Nn][Ii][Qq][Uu][Ee]                             RETURN_TOKEN(UNIQUE);
 
 {ID}                                                 yylval->string=strdup(yytext); RETURN_TOKEN(ID);
 "("                                                  RETURN_TOKEN(LBRACE);
@@ -111,7 +114,7 @@ QUOTE            [\'\"]
 
 
 {QUOTE}[0-9]{4}\-(0?[1-9]|1[012])\-(0?[1-9]|[12][0-9]|3[01]){QUOTE} yylval->string=strdup(yytext); RETURN_TOKEN(DATE_STR);
-{QUOTE}[\42\47A-Za-z0-9_/\.\-\%]*{QUOTE}            yylval->string=strdup(yytext); RETURN_TOKEN(SSS);
+{QUOTE}[\40A-Za-z0-9_/\.\-\%\,]*{QUOTE}            yylval->string=strdup(yytext); RETURN_TOKEN(SSS);
 
 
 ([\-]?[(AVG)|(MAX)|(MIN)|(SUM)|(COUNT)]?[\+\-\*\/\(\)A-Za-z0-9\._]+[\+\-\*/]+[A-Za-z0-9\._]+[\(\)A-Za-z0-9\.\+\-\*/_]*)|(\-+[(AVG)|(MAX)|(MIN)|(SUM)|(COUNT)]?[\(\)A-Za-z0-9\._]+) yylval->string=strdup(yytext);RETURN_TOKEN(EXPRESSION);

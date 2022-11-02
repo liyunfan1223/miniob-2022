@@ -56,6 +56,13 @@ typedef enum {
   AGG_NONE,
 } AggType;
 
+typedef enum {
+  FUNC_ROUND,
+  FUNC_DATE,
+  FUNC_LENGTH,
+  FUNC_NONE,
+} FuncType;
+
 //属性结构体
 typedef struct _RelAttr{
   char *relation_name;   // relation name (may be NULL) 表名
@@ -65,6 +72,10 @@ typedef struct _RelAttr{
   AggType aggType;
   int is_exp;
   char *expression;
+  FuncType func_type;
+  int round_func_param;
+  char * date_func_param;
+  Value * non_table_value;
 } RelAttr;
 
 typedef struct {
@@ -218,6 +229,7 @@ typedef struct {
 //  char * attribute_name;  // Attribute name
   char * attribute_name[MAX_NUM];  // Attribute name
   size_t attr_num;
+  size_t is_unique;
 } CreateIndex;
 
 // struct of  drop_index
@@ -275,6 +287,7 @@ enum SqlCommandFlag {
   SCF_HELP,
   SCF_EXIT,
   SCF_SHOW_INDEX,
+  SCF_SELECT_NONTABLE,
 };
 // struct of flag and sql_struct
 typedef struct Query {
@@ -349,7 +362,7 @@ void show_index_init(ShowIndex * show_index, const char * relation_name);
 void drop_table_destroy(DropTable *drop_table);
 
 void create_index_init(CreateIndex *create_index, const char *index_name, const char *relation_name, const char *attr_name);
-void create_index_multi_rel_init(CreateIndex *create_index, const char *index_name, const char *relation_name);
+void create_index_multi_rel_init(CreateIndex *create_index, const char *index_name, const char *relation_name, size_t is_unique);
 void create_index_append_attr_name(CreateIndex *create_index, const char *attr_name);
 void create_index_destroy(CreateIndex *create_index);
 

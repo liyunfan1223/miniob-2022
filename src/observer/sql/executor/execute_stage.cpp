@@ -231,6 +231,14 @@ void ExecuteStage::handle_request(common::StageEvent *event)
       // TODO
       do_show_index(sql_event);
     } break;
+    case SCF_SELECT_NONTABLE: {
+      try {
+        do_select_nontable(sql_event);
+      } catch (...) {
+        const char *response = "FAILURE\n";
+        session_event->set_response(response);
+      }
+    } break;
     default: {
       LOG_ERROR("Unsupported command=%d\n", sql->flag);
     }
@@ -281,12 +289,31 @@ void print_tuple_header(std::ostream &os, Operator &oper)
         default:
           break;
       }
+      switch (cell_spec->func_type) {
+        case FUNC_LENGTH:
+          os << "LENGTH(";
+          break;
+        case FUNC_ROUND:
+          os << "ROUND(";
+          break;
+        case FUNC_DATE:
+          os << "DATE_FORMAT(";
+          break;
+        default:
+          break;
+      }
       if (cell_spec->alias()) {
         //      os << cell_spec->table_alias() << ".";
         os << cell_spec->alias();
       }
 
-      if (cell_spec->agg_type != AGG_NONE) {
+      if (cell_spec->agg_type != AGG_NONE || cell_spec->func_type != FUNC_NONE) {
+        if (cell_spec->func_type == FUNC_ROUND && cell_spec->round_func_param != 0) {
+          os << "," << cell_spec->round_func_param;
+        }
+        if (cell_spec->func_type == FUNC_DATE && cell_spec->date_func_param != nullptr) {
+          os << "," << cell_spec->date_func_param;
+        }
         os << ")";
       }
     }
@@ -328,6 +355,19 @@ void print_tuple_header_multi_table(std::ostream &os, Operator &oper)
         default:
           break;
       }
+      switch (cell_spec->func_type) {
+        case FUNC_LENGTH:
+          os << "LENGTH(";
+          break;
+        case FUNC_ROUND:
+          os << "ROUND(";
+          break;
+        case FUNC_DATE:
+          os << "DATE_FORMAT(";
+          break;
+        default:
+          break;
+      }
       if (cell_spec->alias()) {
         if (cell_spec->p_rel_alias != nullptr) {
           os << cell_spec->p_rel_alias << ".";
@@ -336,7 +376,13 @@ void print_tuple_header_multi_table(std::ostream &os, Operator &oper)
         }
         os << cell_spec->alias();
       }
-      if (cell_spec->agg_type != AGG_NONE) {
+      if (cell_spec->agg_type != AGG_NONE || cell_spec->func_type != FUNC_NONE) {
+        if (cell_spec->func_type == FUNC_ROUND && cell_spec->round_func_param != 0) {
+          os << "," << cell_spec->round_func_param;
+        }
+        if (cell_spec->func_type == FUNC_DATE && cell_spec->date_func_param != nullptr) {
+          os << "," << cell_spec->date_func_param;
+        }
         os << ")";
       }
     }
@@ -590,6 +636,120 @@ RC replace_exists(Selects & selects) {
   }
   return SUCCESS;
 }
+RC ExecuteStage::do_select_nontable(SQLStageEvent *sql_event)
+{
+  Selects & selects = sql_event->query()->sstr.selection;
+  SessionEvent *session_event = sql_event->session_event();
+  std::stringstream ss;
+  for (size_t i = 0; i < selects.attr_num; i++) {
+    RelAttr & rel = selects.attributes[i];
+    if (i != 0) ss << " | ";
+
+    if (rel.alias_name != nullptr) {
+      ss << rel.alias_name;
+    }
+  }
+  ss << std::endl;
+  char tmp[100];
+  for (size_t i = 0; i < selects.attr_num; i++) {
+    RelAttr &rel = selects.attributes[i];
+    if (i != 0) {
+      ss << " | ";
+    }
+    switch (rel.func_type) {
+      case FUNC_LENGTH: {
+        if (rel.non_table_value->type != CHARS) {
+          throw 0;
+        }
+        ss << std::to_string(strlen((char *)rel.non_table_value->data));
+      } break;
+      case FUNC_ROUND: {
+        if (rel.non_table_value->type != FLOATS) {
+          throw 0;
+        }
+        float val;
+        if (rel.non_table_value->type == INTS) {
+          val = *(int *)rel.non_table_value->data;
+        } else if (rel.non_table_value->type == FLOATS) {
+          val = *(float *)rel.non_table_value->data;
+        }
+        int digit = rel.round_func_param;
+        int time = 1;
+        for (int j = 1; j <= digit; j++) time *= 10;
+        int total = val > 0 ? (int)(val * time + 0.5) : (int)(val * time - 0.5);
+        if (time == 1) {
+          ss << std::to_string(total / time);
+        } else {
+          ss << std::to_string(total / time) << "." << std::to_string(total % time);
+        }
+      } break;
+      case FUNC_DATE: {
+        if (rel.non_table_value->type != DATES) {
+          throw 0;
+        }
+        if (rel.date_func_param == nullptr) {
+          throw 0;
+        }
+        int y, m, d, val;
+        val = *(int *)rel.non_table_value->data;
+        y = val / 10000;
+        m = val % 10000 / 100;
+        d = val % 100;
+        char * pattern = strdup(rel.date_func_param);
+        int pattern_len = strlen(pattern);
+        std::string res = "";
+        for (int j = 0; j < pattern_len; j++) {
+          if (pattern[j] != '%') {
+            res += pattern[j];
+          } else {
+            j++;
+            switch (pattern[j]) {
+              case 'Y': {
+                sprintf(tmp, "%d", y);
+                res += std::string(tmp);
+              } break;
+              case 'y': {
+                sprintf(tmp, "%02d", y % 100);
+                res += std::string(tmp);
+              } break;
+              case 'M': {
+                std::vector<std::string> month = {"January", "February", "March", "April", "May", "June", "July",
+                "August", "September", "October", "November", "December"};
+                res += month[m - 1];
+              } break;
+              case 'm': {
+                sprintf(tmp, "%02d", m);
+                res += std::string(tmp);
+              } break;
+              case 'D': {
+                std::string suffix = "";
+                if (d == 1 || d == 21 || d == 31) {
+                  suffix = "st";
+                } else if (d == 2 || d == 22) {
+                  suffix = "ed";
+                } else if (d == 3 || d == 23) {
+                  suffix = "rd";
+                } else suffix = "th";
+                sprintf(tmp, "%d", d);
+                res += std::string(tmp) + suffix;
+              } break;
+              case 'd': {
+                sprintf(tmp, "%02d", d);
+                res += std::string(tmp);
+              }
+            }
+          }
+        }
+        ss << res;
+      } break;
+      default: {
+      }
+    }
+  }
+  ss << std::endl;
+  session_event->set_response(ss.str());
+  return SUCCESS;
+}
 
 RC ExecuteStage::do_select(SQLStageEvent *sql_event)
 {
@@ -613,20 +773,6 @@ RC ExecuteStage::do_select(SQLStageEvent *sql_event)
   for (auto table : tables) {
     scan_opers.push_back(new TableScanOperator(table));
   }
-
-  SubqueryPredicateOperator pred_oper(selects.conditions, selects.condition_num, selects.relations[0], selects.relations_alias[0], db);
-  pred_oper.add_child(scan_opers[0]);
-
-  TablesJoinPredOperator join_pred_oper(scan_opers, select_stmt->filter_stmt(),
-      selects.conditions, selects.condition_num);
-
-  OrderOperator order_by_oper(selects.order_num, selects.order_attributes);
-  if (scan_opers.size() == 1) {
-    order_by_oper.add_child(&pred_oper);
-  } else {
-    order_by_oper.add_child(&join_pred_oper);
-  }
-
   for (int i = 0; i < (int)selects.relation_num - 1; i++) {
     for (int j = i + 1; j < (int)selects.relation_num; j++) {
       if (selects.relations_alias[i] != nullptr && selects.relations_alias[j] != nullptr
@@ -640,6 +786,20 @@ RC ExecuteStage::do_select(SQLStageEvent *sql_event)
   for (size_t i = 0; i < selects.relation_num; i++) {
     rel_alias[std::string(selects.relations[i])] = selects.relations_alias[i];
   }
+
+  SubqueryPredicateOperator pred_oper(selects.conditions, selects.condition_num, selects.relations[0], selects.relations_alias[0], db);
+  pred_oper.add_child(scan_opers[0]);
+
+  TablesJoinPredOperator join_pred_oper(scan_opers, select_stmt->filter_stmt(),
+      selects.conditions, selects.condition_num, rel_alias);
+
+  OrderOperator order_by_oper(selects.order_num, selects.order_attributes);
+  if (scan_opers.size() == 1) {
+    order_by_oper.add_child(&pred_oper);
+  } else {
+    order_by_oper.add_child(&join_pred_oper);
+  }
+
   ProjectOperator project_oper;
   project_oper.add_child(&order_by_oper);
   rc = add_projection(db, tables, selects.attr_num, selects.attributes, &project_oper, rel_alias);
@@ -672,22 +832,10 @@ RC ExecuteStage::do_select(SQLStageEvent *sql_event)
   }
 
 
-  ExpProjectOperator exp_oper(selects.attr_num, selects.attributes, tables, db);
+  ExpProjectOperator exp_oper(selects.attr_num, selects.attributes, tables, db, rel_alias);
   exp_oper.add_child(tmp_oper);
 
-  bool has_exp_attr = 0;
-  for (size_t i = 0; i < selects.attr_num; i++) {
-    auto & attr = selects.attributes[i];
-    if (attr.is_exp) {
-      has_exp_attr = 1;
-    }
-  }
-  if (has_exp_attr) {
-    output_oper = &exp_oper;
-  } else {
-    output_oper = tmp_oper;
-  }
-
+  output_oper = &exp_oper;
   rc = output_oper->open();
   std::stringstream ss;
   if (select_stmt->tables().size() != 1) {

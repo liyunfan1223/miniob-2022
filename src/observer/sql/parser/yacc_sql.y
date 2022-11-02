@@ -26,6 +26,7 @@ typedef struct ParserContext {
   char id[MAX_NUM];
   OrderType order_type;
   AggType agg_type;
+  FuncType func_type;
   size_t attr_length;
   Selects sub_selects[MAX_NUM];
   size_t sub_select_num;
@@ -38,6 +39,7 @@ typedef struct ParserContext {
   size_t rel_num;
   char * alias_stack[MAX_NUM];
   size_t alias_stack_pt;
+  size_t is_unique;
 } ParserContext;
 
 //获取子串
@@ -144,6 +146,10 @@ ParserContext *get_context(yyscan_t scanner)
         IS
         OR
         AS
+        LENGTH
+        ROUND
+        DATE_FORMAT
+        UNIQUE
 
 %union {
   struct _Attr *attr;
@@ -197,7 +203,10 @@ command:
 	| help
 	| exit
 	| show_index
+	| select_non_table
     ;
+
+
 
 show_index:
     SHOW INDEX FROM ID SEMICOLON {
@@ -259,12 +268,20 @@ desc_table:
     ;
 
 create_index:		/*create index 语句的语法解析树*/
-    CREATE INDEX ID ON ID LBRACE index_col_ID_list RBRACE SEMICOLON
+    CREATE unique_or_not INDEX ID ON ID LBRACE index_col_ID_list RBRACE SEMICOLON
     {
 	CONTEXT->ssql->flag = SCF_CREATE_INDEX;//"create_index";
-	create_index_multi_rel_init(&CONTEXT->ssql->sstr.create_index, $3, $5);
+	create_index_multi_rel_init(&CONTEXT->ssql->sstr.create_index, $4, $6, CONTEXT->is_unique);
     }
     ;
+
+unique_or_not:
+    /* empty */ {
+    	CONTEXT->is_unique = 0;
+    }
+    | UNIQUE {
+    	CONTEXT->is_unique = 1;
+    }
 index_col_ID_list:
     /* empty */
     | index_col_ID index_col_ID_list {
@@ -633,6 +650,21 @@ update_set:
     	updates_append_attr_and_value(&CONTEXT->ssql->sstr.update, $1, value);
     };
 
+select_non_table:
+    SELECT select_nontable_attr select_nontable_attr_list SEMICOLON {
+	for (int i = (int)CONTEXT->rel_num - 1; i >= 0; i--) {
+	    selects_append_relation_alias(&CONTEXT->ssql->sstr.selection, CONTEXT->rel[i], CONTEXT->rel_alias[i]);
+       	}
+       	CONTEXT->ssql->flag=SCF_SELECT_NONTABLE;//"select";
+	// CONTEXT->ssql->sstr.selection.attr_num = CONTEXT->select_length;
+	//临时变量清零
+	CONTEXT->condition_length=0;
+	CONTEXT->from_length=0;
+	CONTEXT->select_length=0;
+	CONTEXT->value_length = 0;
+    }
+    ;
+
 select:				/*  select 语句的语法解析树*/
     SELECT select_attr_or_expression attr_list FROM rel_item rel_list inner_join_list where group order SEMICOLON
     {
@@ -705,7 +737,76 @@ select_attr:
     	relation_attr_aggr_alias_init(&attr, $3, $5, CONTEXT->agg_type, CONTEXT->alias_stack[--CONTEXT->alias_stack_pt]);
     	selects_append_attribute(&CONTEXT->ssql->sstr.selection, &attr);
     }
+    | funcop LBRACE ID RBRACE alias_or_not {
+	RelAttr attr;
+    	relation_attr_func_alias_init(&attr, NULL, $3, CONTEXT->func_type, CONTEXT->alias_stack[--CONTEXT->alias_stack_pt], 0, NULL);
+    	selects_append_attribute(&CONTEXT->ssql->sstr.selection, &attr);
+    }
+    | funcop LBRACE ID DOT ID RBRACE alias_or_not {
+	RelAttr attr;
+    	relation_attr_func_alias_init(&attr, $3, $5, CONTEXT->func_type, CONTEXT->alias_stack[--CONTEXT->alias_stack_pt], 0, NULL);
+    	selects_append_attribute(&CONTEXT->ssql->sstr.selection, &attr);
+    }
+    | funcop LBRACE ID COMMA value RBRACE alias_or_not {
+	RelAttr attr;
+	Value value = CONTEXT->values[--CONTEXT->value_length];
+	if (value.type == INTS) {
+    	    relation_attr_func_alias_init(&attr, NULL, $3, CONTEXT->func_type, CONTEXT->alias_stack[--CONTEXT->alias_stack_pt], *(int *)value.data, NULL);
+    	} else if (value.type == CHARS) {
+    	    relation_attr_func_alias_init(&attr, NULL, $3, CONTEXT->func_type, CONTEXT->alias_stack[--CONTEXT->alias_stack_pt], 0, (char *)value.data);
+    	}
+    	selects_append_attribute(&CONTEXT->ssql->sstr.selection, &attr);
+    }
+    | funcop LBRACE ID DOT ID COMMA value RBRACE alias_or_not {
+	RelAttr attr;
+	Value value = CONTEXT->values[--CONTEXT->value_length];
+	if (value.type == INTS) {
+	    relation_attr_func_alias_init(&attr, $3, $5, CONTEXT->func_type, CONTEXT->alias_stack[--CONTEXT->alias_stack_pt], *(int *)value.data, NULL);
+	} else if (value.type == CHARS) {
+	    relation_attr_func_alias_init(&attr, $3, $5, CONTEXT->func_type, CONTEXT->alias_stack[--CONTEXT->alias_stack_pt], 0, (char *)value.data);
+	}
+    	selects_append_attribute(&CONTEXT->ssql->sstr.selection, &attr);
+    }
     ;
+
+select_nontable_attr_list:
+    /* empty */
+    | COMMA select_nontable_attr select_nontable_attr_list {
+    }
+    ;
+
+select_nontable_attr:
+    funcop LBRACE value RBRACE alias_or_not {
+    	RelAttr attr;
+    	Value value2 = CONTEXT->values[--CONTEXT->value_length];
+       	relation_attr_nontable_func_alias_init(&attr, CONTEXT->func_type, CONTEXT->alias_stack[--CONTEXT->alias_stack_pt], 0, NULL, &value2);
+       	selects_append_attribute(&CONTEXT->ssql->sstr.selection, &attr);
+    }
+    | funcop LBRACE value COMMA value RBRACE alias_or_not {
+    	RelAttr attr;
+    	Value value = CONTEXT->values[--CONTEXT->value_length];
+    	Value value2 = CONTEXT->values[--CONTEXT->value_length];
+    	if (value.type == INTS) {
+       	    relation_attr_nontable_func_alias_init(&attr, CONTEXT->func_type, CONTEXT->alias_stack[--CONTEXT->alias_stack_pt], *(int *)value.data, NULL, &value2);
+       	} else if (value.type == CHARS) {
+       	    relation_attr_nontable_func_alias_init(&attr, CONTEXT->func_type, CONTEXT->alias_stack[--CONTEXT->alias_stack_pt], 0, (char *)value.data, &value2);
+       	}
+        selects_append_attribute(&CONTEXT->ssql->sstr.selection, &attr);
+    }
+    ;
+
+funcop:
+    LENGTH {
+	CONTEXT->func_type = FUNC_LENGTH;
+    }
+    | ROUND {
+	CONTEXT->func_type = FUNC_ROUND;
+    }
+    | DATE_FORMAT {
+	CONTEXT->func_type = FUNC_DATE;
+    }
+    ;
+
 aggop:
     MAX {
 	CONTEXT->agg_type = AGG_MAX;
@@ -793,7 +894,6 @@ condition:
 	Condition condition;
 	condition_conj_init(&condition, CONTEXT->comps[--CONTEXT->comp_num], 1, &left_attr, NULL, 0, NULL, right_value, CONTEXT->conj[--CONTEXT->conj_num]);
 	CONTEXT->conditions[CONTEXT->condition_length++] = condition;
-	printf("WHERE FINISHED %d\n", CONTEXT->condition_length);
     }
     |value_or_expression comOp value_or_expression
     {
@@ -844,7 +944,7 @@ condition:
 
 	Condition condition;
 	condition_conj_init(&condition, CONTEXT->comps[--CONTEXT->comp_num], 0, NULL, left_value, 1, &right_attr, NULL, CONTEXT->conj[--CONTEXT->conj_num]);
-	condition_conj_init(&condition, CONTEXT->comps[--CONTEXT->comp_num], 0, NULL, left_value, 1, &right_attr, NULL, CONTEXT->conj[--CONTEXT->conj_num]);
+	// condition_conj_init(&condition, CONTEXT->comps[--CONTEXT->comp_num], 0, NULL, left_value, 1, &right_attr, NULL, CONTEXT->conj[--CONTEXT->conj_num]);
 	CONTEXT->conditions[CONTEXT->condition_length++] = condition;
     }
     |ID DOT ID comOp ID DOT ID
@@ -857,6 +957,34 @@ condition:
 	condition_conj_init(&condition, CONTEXT->comps[--CONTEXT->comp_num], 1, &left_attr, NULL, 1, &right_attr, NULL, CONTEXT->conj[--CONTEXT->conj_num]);
 	CONTEXT->conditions[CONTEXT->condition_length++] = condition;
     }
+    | LENGTH LBRACE ID RBRACE comOp value_or_expression {
+	RelAttr left_attr;
+	relation_attr_func_alias_init(&left_attr, NULL, $3, FUNC_LENGTH, NULL, NULL, NULL);
+	Value *right_value = &CONTEXT->values[--CONTEXT->value_length];
+	Condition condition;
+	condition_conj_init(&condition, CONTEXT->comps[--CONTEXT->comp_num], 1, &left_attr, NULL, 0, NULL, right_value, CONTEXT->conj[--CONTEXT->conj_num]);
+	CONTEXT->conditions[CONTEXT->condition_length++] = condition;
+    }
+    | LENGTH LBRACE ID DOT ID RBRACE comOp LENGTH LBRACE ID DOT ID RBRACE  {
+    	RelAttr left_attr;
+	relation_attr_func_alias_init(&left_attr, $3, $5, FUNC_LENGTH, NULL, NULL, NULL);
+	RelAttr right_attr;
+	relation_attr_func_alias_init(&right_attr, $10, $12, FUNC_LENGTH, NULL, NULL, NULL);
+
+	Condition condition;
+	condition_conj_init(&condition, CONTEXT->comps[--CONTEXT->comp_num], 1, &left_attr, NULL, 1, &right_attr, NULL, CONTEXT->conj[--CONTEXT->conj_num]);
+	CONTEXT->conditions[CONTEXT->condition_length++] = condition;
+    }
+    | ROUND LBRACE ID DOT ID RBRACE comOp ROUND LBRACE ID DOT ID RBRACE  {
+        RelAttr left_attr;
+    	relation_attr_func_alias_init(&left_attr, $3, $5, FUNC_ROUND, NULL, NULL, NULL);
+    	RelAttr right_attr;
+    	relation_attr_func_alias_init(&right_attr, $10, $12, FUNC_ROUND, NULL, NULL, NULL);
+
+    	Condition condition;
+    	condition_conj_init(&condition, CONTEXT->comps[--CONTEXT->comp_num], 1, &left_attr, NULL, 1, &right_attr, NULL, CONTEXT->conj[--CONTEXT->conj_num]);
+    	CONTEXT->conditions[CONTEXT->condition_length++] = condition;
+        }
     ;
     | EXISTS value {
 	Value left_value;

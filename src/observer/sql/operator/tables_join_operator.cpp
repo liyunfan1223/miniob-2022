@@ -154,7 +154,8 @@ bool TablesJoinPredOperator::do_predicate_( std::vector<Record *> &records, int 
   int i = -1;
   for (const FilterUnit *filter_unit : filter_stmt_->filter_units()) {
     i++;
-    if (conditions_[i].left_value.type == EXPRESSION_T || conditions_[i].right_value.type == EXPRESSION_T) {
+    if (conditions_[i].left_value.type == EXPRESSION_T || conditions_[i].right_value.type == EXPRESSION_T
+        || conditions_[i].left_attr.func_type == FUNC_LENGTH || conditions_[i].right_attr.func_type == FUNC_LENGTH) {
       continue;
     }
     Expression *left_expr = filter_unit->left();
@@ -190,7 +191,36 @@ bool TablesJoinPredOperator::do_predicate_by_cond(Tuple &tuple)
 
     if (cond.left_is_attr) {
       RelAttr & relAttr = cond.left_attr;
-      tuple.find_cell(relAttr.relation_name, relAttr.attribute_name, tc_left);
+      char * r_rel_name = relAttr.relation_name;
+      for (auto & item : rel_alias_) {
+        if (item.second != nullptr && strcmp(item.second, relAttr.relation_name) == 0) {
+          r_rel_name = strdup(item.first.c_str());
+          break;
+        }
+      }
+      tuple.find_cell(r_rel_name, relAttr.attribute_name, tc_left);
+
+      if (relAttr.func_type == FUNC_LENGTH) {
+        if (tc_left.attr_type() != CHARS) {
+          throw 0;
+        }
+        tc_left.set_type(INTS);
+        tc_left.set_data((char *)new int(strlen(tc_left.data())));
+      }
+      if (relAttr.func_type == FUNC_ROUND) {
+        if (tc_left.attr_type() != FLOATS) {
+          throw 0;
+        }
+        tc_left.set_type(FLOATS);
+        if (tc_left.attr_type() == INTS) {
+          int val = *(int *)tc_left.data();
+          tc_left.set_data((char *)new float(val));
+        } else if (tc_left.attr_type() == FLOATS) {
+          float val = *(float *)tc_left.data();
+          float res = val > 0 ? (int)(val + 0.5) : (int)(val - 0.5);
+          tc_left.set_data((char *)new float(res));
+        }
+      }
     } else {
       Value & value = cond.left_value;
       if (value.type == EXPRESSION_T) {
@@ -215,7 +245,35 @@ bool TablesJoinPredOperator::do_predicate_by_cond(Tuple &tuple)
 
     if (cond.right_is_attr) {
       RelAttr & relAttr = cond.right_attr;
-      tuple.find_cell(relAttr.relation_name, relAttr.attribute_name, tc_right);
+      char * r_rel_name = relAttr.relation_name;
+      for (auto & item : rel_alias_) {
+        if (item.second != nullptr && strcmp(item.second, relAttr.relation_name) == 0) {
+          r_rel_name = strdup(item.first.c_str());
+          break;
+        }
+      }
+      tuple.find_cell(r_rel_name, relAttr.attribute_name, tc_right);
+      if (relAttr.func_type == FUNC_LENGTH) {
+        if (tc_right.attr_type() != CHARS) {
+          throw 0;
+        }
+        tc_right.set_type(INTS);
+        tc_right.set_data((char *)new int(strlen(tc_right.data())));
+      }
+      if (relAttr.func_type == FUNC_ROUND) {
+        if (tc_right.attr_type() != FLOATS) {
+          throw 0;
+        }
+        tc_right.set_type(FLOATS);
+        if (tc_right.attr_type() == INTS) {
+          int val = *(int *)tc_right.data();
+          tc_right.set_data((char *)new float(val));
+        } else if (tc_right.attr_type() == FLOATS) {
+          float val = *(float *)tc_right.data();
+          float res = val > 0 ? (int)(val + 0.5) : (int)(val - 0.5);
+          tc_right.set_data((char *)new float(res));
+        }
+      }
     } else {
       Value & value = cond.right_value;
       if (value.type == EXPRESSION_T) {
