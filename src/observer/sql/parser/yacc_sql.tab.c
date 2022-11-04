@@ -1870,7 +1870,7 @@ yyreduce:
 
   case 53: /* type: TEXT_T  */
 #line 375 "yacc_sql.y"
-                { (yyval.number)=TEXTS; CONTEXT->attr_length = 4096; }
+                { (yyval.number)=CHARS; CONTEXT->attr_length = 4096; }
 #line 1875 "yacc_sql.tab.c"
     break;
 

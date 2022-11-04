@@ -372,7 +372,7 @@ type:
        | STRING_T { $$=CHARS; CONTEXT->attr_length = 40; }
        | FLOAT_T { $$=FLOATS; CONTEXT->attr_length = 4; }
        | DATE_T { $$=DATES; CONTEXT->attr_length = 4; }
-       | TEXT_T { $$=TEXTS; CONTEXT->attr_length = 4096; }
+       | TEXT_T { $$=CHARS; CONTEXT->attr_length = 4096; }
        ;
 
 ID_get:
