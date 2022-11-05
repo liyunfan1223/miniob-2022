@@ -1,0 +1,3 @@
+- 修改parser解析方法和Inserts结构
+- sql/executor/execute_stage.cpp do_insert循环insert元组，发生错误后rollback
+  - 修改table的insert_record函数接口记录record，并在发生错误后delete records

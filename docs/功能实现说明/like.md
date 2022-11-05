@@ -1,0 +1,1 @@
+- 会有长度超过4的字符串。暂时把默认分配的长度从4改成40。(src/observer/sql/parser/yacc_sql.y)
