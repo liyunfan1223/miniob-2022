@@ -131,14 +131,14 @@ const FieldMeta *TableMeta::field(int index) const
 {
   return &fields_[index];
 }
-const FieldMeta *TableMeta::field(const char *name) const
+FieldMeta *TableMeta::field(const char *name) const
 {
   if (nullptr == name) {
     return nullptr;
   }
   for (const FieldMeta &field : fields_) {
     if (0 == strcmp(field.name(), name)) {
-      return &field;
+      return const_cast<FieldMeta *> (&field);
     }
   }
   return nullptr;
@@ -172,13 +172,41 @@ const IndexMeta *TableMeta::index(const char *name) const
   }
   return nullptr;
 }
+const IndexMeta *TableMeta::find_index_by_field_multi( char **field,size_t attr_num) const{
+  for (const IndexMeta &index : indexes_) {
+    int k=0;///index的循序也是有讲究的
+    const std::vector<std::string> &f = index.field();
+    for (int j=0;j<f.size();j++){
+      int flag=0;
+      for (;k<attr_num;k++){
+        if (0 == strcmp(f[j].c_str(), field[k])) {
+          flag+=1;
+        }
+      }
+      if (flag==f.size()&&f.size()==attr_num){
+        return &index;
+      }
+    }
+
+  }
+  return nullptr;
+}
 
 const IndexMeta *TableMeta::find_index_by_field(const char *field) const
 {
   for (const IndexMeta &index : indexes_) {
-    if (0 == strcmp(index.field(), field)) {
-      return &index;
+    const std::vector<std::string> &f = index.field();
+    for (int j=0;j<f.size();j++){
+      int flag=0;
+      if (0 == strcmp(f[j].c_str(), field)) {
+        flag+=1;
+      }
+      if (flag==f.size()){
+        return &index;
+
+      }
     }
+
   }
   return nullptr;
 }

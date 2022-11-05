@@ -43,7 +43,7 @@ public:
   const char *name() const;
   const FieldMeta *trx_field() const;
   const FieldMeta *field(int index) const;
-  const FieldMeta *field(const char *name) const;
+FieldMeta *field(const char *name) const;
   const FieldMeta *find_field_by_offset(int offset) const;
   const std::vector<FieldMeta> *field_metas() const { return &fields_; }
   int field_num() const; // sys field included
@@ -51,6 +51,7 @@ public:
 
   const IndexMeta *index(const char *name) const;
   const IndexMeta *find_index_by_field(const char *field) const;
+  const IndexMeta *find_index_by_field_multi( char **field,size_t attr_num) const;
   const IndexMeta *index(int i) const;
 
   int find_field_index_by_name(const char *name) const;

@@ -899,7 +899,7 @@ RC ExecuteStage::do_create_index(SQLStageEvent *sql_event)
     return RC::SCHEMA_TABLE_NOT_EXIST;
   }
 
-  RC rc = table->create_index(nullptr, create_index.index_name, create_index.attribute_name, create_index.attr_num);
+  RC rc = table->create_index(nullptr, create_index.index_name, create_index.attribute_name, create_index.attr_num,create_index.is_unique);
   sql_event->session_event()->set_response(rc == RC::SUCCESS ? "SUCCESS\n" : "FAILURE\n");
   return rc;
 }
@@ -972,7 +972,103 @@ RC ExecuteStage::do_insert(SQLStageEvent *sql_event)
   Record record;
   Record recordlist[inserts.record_num];
   int rollback_idx=0;
+////判断是否有unique index，判断是否有和insert 相同的记录，passed unique insert
+//  std::vector<Index *>  indexs=table->get_total_index();
+//  int flag=0;
+//  int index_need_check_position = -1;
+//  for(Index * idx:indexs){
+//    index_need_check_position++;
+//    if ((int)idx->index_meta().is_unique()){
+//      //judge whether records are not unique
+//      const std::vector<std::string> &fields = idx->index_meta().field();
+////     多索引的时候存在问题
+//      LOG_INFO("Check unique index: %s, %s, %d", idx->index_meta().name(), idx->index_meta().field()[0].c_str(), index_need_check_position);
+//        const char *left_key = static_cast<const char *>(inserts.records->values[index_need_check_position].data);
+//        const char *right_key = static_cast<const char *>(inserts.records->values[index_need_check_position].data);
+//        int left_len = 4;
+//        int right_len = 4;
+//        bool left_inclusive = true;
+//        bool right_inclusive = true;
+//        if (inserts.records->values[index_need_check_position].type == CHARS) {
+//          left_len = left_key != nullptr ? strlen(left_key) : 0;
+//          right_len = right_key != nullptr ? strlen(right_key) : 0;
+//        }
+//        IndexScanner *index_scanner = idx->create_scanner(left_key, left_len, left_inclusive, right_key, right_len, right_inclusive);
+//        RID rid;
+//        RC rc2 = index_scanner->next_entry(&rid);
+//        if (rc2 != RC::SUCCESS) {
+//          continue;
+//        } else {
+//          session_event->set_response("FAILURE\n");
+//          return RC::REPEATED_UNIQUE_VALUE;
+//        }
+//    }
+//  }
+  std::vector<Index *>  indexs=table->get_total_index();
+  int flag=0;
+  for(Index * idx:indexs){
+    if ((int)idx->index_meta().is_unique()){
+      //构造condition，调用ScanOperator
+      //如果field包含update条件，那么用要修改的field属性进行查询。查得到，flag=1。
+      const std::vector<std::string> &fields = idx->index_meta().field();
+      int c_num=0;
+      Condition c[20];
+      for( std::string f:fields){
+        //field是否在修改的值中
+        for(int j =2;j<table->table_meta().field_num();j++){//table的前两个field不用看，是多余的
+          if (strcmp(f.c_str(),table->table_meta().field(j)->name())==0){
+            //            构造condition
+            c[c_num].left_is_attr=1;    // TRUE if left-hand side is an attribute
+            Value left_value;    // left-hand side value if left_is_attr = FALSE
+            c[c_num].left_attr.attribute_name=const_cast<char *>(table->table_meta().field(j)->name());   // left-hand side attribute
+            c[c_num].comp=EQUAL_TO;         // comparison operator
+            c[c_num].right_is_attr=0;   // TRUE if right-hand side is an attribute
+            c[c_num].right_value=inserts.records[0].values[j-2];
+            if(c_num==0){
+              c[c_num].conj=CONJ_FIRST;
+            }else{
+              c[c_num].conj=CONJ_AND;
+            }
+            c_num++;
+          }
+        }
+      }
+      //index 包含在update的修改范围内
+      if (c_num==fields.size()){
+        TableScanOperator scan_oper(table);
+        SubqueryPredicateOperator spred_oper(c, c_num, table_name, db);
+        spred_oper.add_child(&scan_oper);
+        std::vector<Operator *> children;
+        children.push_back(&spred_oper);
+        if (children.size() != 1) {
+          LOG_WARN("delete operator must has 1 child");
+          session_event->set_response("FAILURE\n");
+          return RC::INTERNAL;
+        }
 
+        Operator *child = children[0];
+        RC rc = child->open();
+        if (rc != RC::SUCCESS) {
+          LOG_WARN("failed to open child operator: %s", strrc(rc));
+          session_event->set_response("FAILURE\n");
+          return rc;
+        }
+        while (RC::SUCCESS == (rc = child->next())) {
+          Tuple *tuple = child->current_tuple();
+          if (nullptr == tuple) {
+            continue;
+          }else{
+            flag=1;
+            break;
+          }
+        }
+      }
+    }
+  }
+  if(flag==1){
+    session_event->set_response("FAILURE\n");
+    return RC::REPEATED_UNIQUE_VALUE;
+  }
   for (int i = 0; i < (int)inserts.record_num; i++) {
     rc= table->insert_record(trx, inserts.records[i].value_num, inserts.records[i].values, record);
 //    记录所有成功的operation的地址。operations_是trx的private变量。调用table->rollback_insert()。在rollback之后要delete_operatoin。
@@ -1046,6 +1142,7 @@ RC ExecuteStage::do_update(SQLStageEvent * sql_event) //UpdateStmt *stmt, Sessio
     field_idxs.push_back(field_idx);
   }
 
+
   TableScanOperator scan_oper(update_stmt->table());
 
   SubqueryPredicateOperator spred_oper(updates.conditions, updates.condition_num, updates.relation_name, db);
@@ -1062,6 +1159,109 @@ RC ExecuteStage::do_update(SQLStageEvent * sql_event) //UpdateStmt *stmt, Sessio
     LOG_WARN("delete operator must has 1 child");
     session_event->set_response("FAILURE\n");
     return RC::INTERNAL;
+  }
+
+  //unique cases：如果修改后会发生冲突，但本身找不到需要修改的记录，也是返回success
+  Operator *child2 = children[0];
+  RC rc_tag=RC::SUCCESS;
+  RC rc2 = child2->open();
+  if (rc2 != RC::SUCCESS) {
+    LOG_WARN("failed to open child operator: %s", strrc(rc2));
+    session_event->set_response("FAILURE\n");
+    return rc2;
+  }
+  rc2=RC::SUCCESS;
+  if (child2->next()!=RC::SUCCESS) {
+    session_event->set_response("SUCCESS\n");
+    if (!session->is_trx_multi_operation_mode()) {
+      CLogRecord *clog_record = nullptr;
+      rc2 = clog_manager->clog_gen_record(CLogType::REDO_MTR_COMMIT, trx->get_current_id(), clog_record);
+      if (rc2 != RC::SUCCESS || clog_record == nullptr) {
+        session_event->set_response("FAILURE\n");
+        return rc2;
+      }
+
+      rc2 = clog_manager->clog_append_record(clog_record);
+      if (rc2 != RC::SUCCESS) {
+        session_event->set_response("FAILURE\n");
+        return rc2;
+      }
+
+      trx->next_current_id();
+      session_event->set_response("SUCCESS\n");
+    }
+
+    return rc2;
+  }
+
+  //unique cases
+  std::vector<Index *>  indexs=table->get_total_index();
+  int flag=0;
+  for(Index * idx:indexs){
+    if ((int)idx->index_meta().is_unique()){
+      //构造condition，调用ScanOperator
+      //如果field包含update条件，那么用要修改的field属性进行查询。查得到，flag=1。
+      const std::vector<std::string> &fields = idx->index_meta().field();
+      int c_num=0;
+      Condition c[20];
+      for( std::string f:fields){
+        //field是否在修改的值中
+        for(int j =0;j<updates.attr_num;j++){
+          if (strcmp(f.c_str(),updates.attribute_name[j])==0){
+            //            构造condition
+            c[c_num].left_is_attr=1;    // TRUE if left-hand side is an attribute
+                                                                            // 1时，操作符左边是属性名，0时，是属性值
+            Value left_value;    // left-hand side value if left_is_attr = FALSE
+            c[c_num].left_attr.attribute_name=updates.attribute_name[j];   // left-hand side attribute
+            c[c_num].comp=EQUAL_TO;         // comparison operator
+            c[c_num].right_is_attr=0;   // TRUE if right-hand side is an attribute
+                                                                            // 1时，操作符右边是属性名，0时，是属性值
+                                                                            //          c[c_num].right_attr;  // right-hand side attribute if right_is_attr = TRUE 右边的属性
+            c[c_num].right_value=updates.value[j];
+            if(c_num==0){
+              c[c_num].conj=CONJ_FIRST;
+            }else{
+              c[c_num].conj=CONJ_AND;
+            }
+            c_num++;
+          }
+        }
+      }
+      //index 包含在update的修改范围内
+      if (c_num==fields.size()){
+        TableScanOperator scan_oper2(update_stmt->table());
+        SubqueryPredicateOperator spred_oper2(c, c_num, updates.relation_name, db);
+        spred_oper2.add_child(&scan_oper2);
+        std::vector<Operator *> children2;
+        children2.push_back(&spred_oper2);
+        if (children2.size() != 1) {
+          LOG_WARN("delete operator must has 1 child");
+          session_event->set_response("FAILURE\n");
+          return RC::INTERNAL;
+        }
+
+        Operator *child2 = children2[0];
+        RC rc = child2->open();
+        if (rc != RC::SUCCESS) {
+          LOG_WARN("failed to open child operator: %s", strrc(rc));
+          session_event->set_response("FAILURE\n");
+          return rc;
+        }
+        while (RC::SUCCESS == (rc = child2->next())) {
+          Tuple *tuple = child2->current_tuple();
+          if (nullptr == tuple) {
+            continue;
+          }else{
+            flag=1;
+            break;
+          }
+        }
+      }
+    }
+  }
+  if(flag==1){
+    session_event->set_response("FAILURE\n");
+    return RC::REPEATED_UNIQUE_VALUE;
   }
 
   Operator *child = children[0];

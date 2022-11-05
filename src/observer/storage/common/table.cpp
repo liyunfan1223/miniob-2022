@@ -186,35 +186,47 @@ RC Table::open(const char *meta_file, const char *base_dir, CLogManager *clog_ma
   base_dir_ = base_dir;
 
   const int index_num = table_meta_.index_num();
+  std::vector<FieldMeta *>field_metas;
   for (int i = 0; i < index_num; i++) {
     const IndexMeta *index_meta = table_meta_.index(i);
-    const FieldMeta *field_meta = table_meta_.field(index_meta->field());
+    const std::vector<std::string> &f = index_meta->field();
+    for(int j=0;j<f.size();j++){
+    const FieldMeta *field_meta = table_meta_.field(f[j].c_str());
     if (field_meta == nullptr) {
       LOG_ERROR("Found invalid index meta info which has a non-exists field. table=%s, index=%s, field=%s",
           name(),
           index_meta->name(),
-          index_meta->field());
+          f[j].c_str());
       // skip cleanup
       //  do all cleanup action in destructive Table function
       return RC::GENERIC_ERROR;
     }
-
-    BplusTreeIndex *index = new BplusTreeIndex();
-    std::string index_file = table_index_file(base_dir, name(), index_meta->name());
-    rc = index->open(index_file.c_str(), *index_meta, *field_meta);
-    if (rc != RC::SUCCESS) {
-      delete index;
-      LOG_ERROR("Failed to open index. table=%s, index=%s, file=%s, rc=%d:%s",
-          name(),
-          index_meta->name(),
-          index_file.c_str(),
-          rc,
-          strrc(rc));
-      // skip cleanup
-      //  do all cleanup action in destructive Table function.
-      return rc;
+    field_metas.push_back(const_cast<FieldMeta *>(field_meta));
     }
-    indexes_.push_back(index);
+  }
+  for (int i = 0; i < index_num; i++) {
+    const IndexMeta *index_meta = table_meta_.index(i);
+    const std::vector<std::string> &f = index_meta->field();
+    for (int j = 0; j < f.size(); j++) {
+      const FieldMeta *field_meta = table_meta_.field(f[j].c_str());
+      BplusTreeIndex *index = new BplusTreeIndex();
+      std::string index_file = table_index_file(base_dir, name(), index_meta->name());
+      rc = index->open(index_file.c_str(), *index_meta, field_metas);
+      if (rc != RC::SUCCESS) {
+        delete index;
+        LOG_ERROR("Failed to open index. table=%s, index=%s, file=%s, rc=%d:%s",
+            name(),
+            index_meta->name(),
+            index_file.c_str(),
+            rc,
+            strrc(rc));
+        // skip cleanup
+        //  do all cleanup action in destructive Table function.
+        return rc;
+      }
+
+      indexes_.push_back(index);
+    }
   }
 
   if (clog_manager_ == nullptr) {
@@ -643,26 +655,30 @@ static RC insert_index_record_reader_adapter(Record *record, void *context)
   return inserter.insert_index(record);
 }
 
-RC Table::create_index(Trx *trx, const char *index_name, char ** attribute_name, size_t attr_num)
+RC Table::create_index(Trx *trx, const char *index_name, char ** attribute_name, size_t attr_num,size_t is_unique)
 {
-  if (common::is_blank(index_name) || common::is_blank(attribute_name[0])) {
-    LOG_INFO("Invalid input arguments, table name is %s, index_name is blank or attribute_name is blank", name());
-    return RC::INVALID_ARGUMENT;
-  }
-  if (table_meta_.index(index_name) != nullptr || table_meta_.find_index_by_field((attribute_name[0]))) {
-    LOG_INFO("Invalid input arguments, table name is %s, index %s exist or attribute %s exist index",
-             name(), index_name, attribute_name[0]);
-    return RC::SCHEMA_INDEX_EXIST;
-  }
-
-  const FieldMeta *field_meta = table_meta_.field(attribute_name[0]);
-  if (!field_meta) {
-    LOG_INFO("Invalid input arguments, there is no field of %s in table:%s.", attribute_name[0], name());
-    return RC::SCHEMA_FIELD_MISSING;
+  std::vector<FieldMeta*> field_meta;
+  for (int i =0;i<attr_num;i++) {
+    if (common::is_blank(index_name) || common::is_blank(attribute_name[i])) {
+      LOG_INFO("Invalid input arguments, table name is %s, index_name is blank or attribute_name is blank", name());
+      return RC::INVALID_ARGUMENT;
+    }
+    if (table_meta_.index(index_name) != nullptr || table_meta_.find_index_by_field_multi(attribute_name,attr_num)) {
+      LOG_INFO("Invalid input arguments, table name is %s, index %s exist or attribute %s exist index",
+          name(),
+          index_name,
+          attribute_name[i]);
+      return RC::SCHEMA_INDEX_EXIST;
+    }
+    field_meta.push_back(table_meta_.field(attribute_name[i]));
+    if (!field_meta[i]) {
+      LOG_INFO("Invalid input arguments, there is no field of %s in table:%s.", attribute_name[0], name());
+      return RC::SCHEMA_FIELD_MISSING;
+    }
   }
 
   IndexMeta new_index_meta;
-  RC rc = new_index_meta.init(index_name, *field_meta);
+  RC rc = new_index_meta.init(index_name, field_meta,is_unique);
   if (rc != RC::SUCCESS) {
     LOG_INFO("Failed to init IndexMeta in table:%s, index_name:%s, field_name:%s",
              name(), index_name, attribute_name[0]);
@@ -672,7 +688,7 @@ RC Table::create_index(Trx *trx, const char *index_name, char ** attribute_name,
   // 创建索引相关数据
   BplusTreeIndex *index = new BplusTreeIndex();
   std::string index_file = table_index_file(base_dir_.c_str(), name(), index_name);
-  rc = index->create(index_file.c_str(), new_index_meta, *field_meta);
+  rc = index->create(index_file.c_str(), new_index_meta, field_meta);
   if (rc != RC::SUCCESS) {
     delete index;
     LOG_ERROR("Failed to create bplus tree index. file name=%s, rc=%d:%s", index_file.c_str(), rc, strrc(rc));
@@ -1174,19 +1190,28 @@ Index *Table::find_index(const char *index_name) const
   }
   return nullptr;
 }
+std::vector<Index *> Table::get_total_index() const
+{
+  return indexes_;
+}
+
 std::string Table::get_index() const
 {
   std::string base,s;
 //  "Table | Non_unique | Key_name | Seq_in_index | Column_name\n";
   base+=table_meta_.name();
   base+=+" | ";
-  base+="1";//不适用于unique
-  base+=+" | ";
+
   for (Index *index : indexes_) {
+    std::string Unique= std::to_string((index->index_meta().is_unique()+1)%2);//non-unique
     std::string Key_name=index->index_meta().name();
-    std::string Seq_in_index="1";//不适用于muti-index
-    std::string Column_name=index->index_meta().field();
-    s+=base+Key_name+" | "+Seq_in_index+" | "+Column_name+"\n";
+    const std::vector<std::string> &f = index->index_meta().field();
+    for(int j=0;j<f.size();j++){
+      std::string Seq_in_index=std::to_string(j+1);
+      std::string Column_name=f[j];
+      s+=base+Unique+" | "+Key_name+" | "+Seq_in_index+" | "+Column_name+"\n";
+    }
+
   }
   return s;
 }

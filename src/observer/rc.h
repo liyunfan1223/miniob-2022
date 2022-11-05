@@ -224,7 +224,7 @@ enum RC {
   FILE_ERROR,       /* File error */
   LOGBUF,           /* clog buffer error */
   NOTICE = 100,     /* Notifications from log() */
-
+  REPEATED_UNIQUE_VALUE,
   /* buffer pool part */
   BUFFERPOOL_EXIST = (BUFFERPOOL | (RCBufferPool::BP_EXIST << 8)),
   BUFFERPOOL_FILEERR = (BUFFERPOOL | (RCBufferPool::BP_FILEERR << 8)),

@@ -69,7 +69,7 @@ public:
   RC scan_record(Trx *trx, ConditionFilter *filter, int limit, void *context,
       void (*record_reader)(const char *data, void *context));
 
-  RC create_index(Trx *trx, const char *index_name, char ** attribute_name, size_t attr_num);
+  RC create_index(Trx *trx, const char *index_name, char ** attribute_name, size_t attr_num ,size_t is_unique);
 
   RC get_record_scanner(RecordFileScanner &scanner);
 
@@ -122,6 +122,7 @@ private:
 public:
   Index *find_index(const char *index_name) const;
   std::string get_index() const;
+  std::vector<Index *> get_total_index() const;
   Index *find_index_by_field(const char *field_name) const;
 
 private:
