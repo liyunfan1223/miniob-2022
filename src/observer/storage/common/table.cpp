@@ -806,6 +806,10 @@ RC Table::update_record(Trx *trx, Record *record, std::vector<const FieldMeta *>
       }
       switch (ret_cell.attr_type()) {
         case INTS: {
+          int null_mask;
+          memcpy(&null_mask, New_record.data() + TableMeta::null_field_offset, sizeof(int32_t));
+          null_mask &= ~(1u << (field_idx - TableMeta::system_field_num));
+          memcpy(New_record.data() + TableMeta::null_field_offset, &null_mask, sizeof(int32_t));
           if (field_meta->type() == INTS) {
             int v = *(int *)(ret_cell.data());
             memcpy(New_record.data() + field_meta->offset(), &v, field_meta->len());
@@ -819,6 +823,10 @@ RC Table::update_record(Trx *trx, Record *record, std::vector<const FieldMeta *>
           }
         } break;
         case FLOATS: {
+          int null_mask;
+          memcpy(&null_mask, New_record.data() + TableMeta::null_field_offset, sizeof(int32_t));
+          null_mask &= ~(1u << (field_idx - TableMeta::system_field_num));
+          memcpy(New_record.data() + TableMeta::null_field_offset, &null_mask, sizeof(int32_t));
           if (field_meta->type() == INTS) {
             int v = *(float *)(ret_cell.data());
             memcpy(New_record.data() + field_meta->offset(), &v, field_meta->len());
@@ -832,6 +840,10 @@ RC Table::update_record(Trx *trx, Record *record, std::vector<const FieldMeta *>
           }
         } break;
         case CHARS: {
+          int null_mask;
+          memcpy(&null_mask, New_record.data() + TableMeta::null_field_offset, sizeof(int32_t));
+          null_mask &= ~(1u << (field_idx - TableMeta::system_field_num));
+          memcpy(New_record.data() + TableMeta::null_field_offset, &null_mask, sizeof(int32_t));
           if (field_meta->type() != CHARS) {
             return RC::GENERIC_ERROR;
           }
@@ -839,6 +851,10 @@ RC Table::update_record(Trx *trx, Record *record, std::vector<const FieldMeta *>
           memcpy(New_record.data() + field_meta->offset(), s, field_meta->len());
         } break;
         case DATES: {
+          int null_mask;
+          memcpy(&null_mask, New_record.data() + TableMeta::null_field_offset, sizeof(int32_t));
+          null_mask &= ~(1u << (field_idx - TableMeta::system_field_num));
+          memcpy(New_record.data() + TableMeta::null_field_offset, &null_mask, sizeof(int32_t));
           int v = *(int *)(ret_cell.data());
           memcpy(New_record.data() + field_meta->offset(), &v, field_meta->len());
         } break;
@@ -861,6 +877,10 @@ RC Table::update_record(Trx *trx, Record *record, std::vector<const FieldMeta *>
       switch (value.type) {
         // case DATES:
         case INTS: {
+          int null_mask;
+          memcpy(&null_mask, New_record.data() + TableMeta::null_field_offset, sizeof(int32_t));
+          null_mask &= ~(1u << (field_idx - TableMeta::system_field_num));
+          memcpy(New_record.data() + TableMeta::null_field_offset, &null_mask, sizeof(int32_t));
           if (field_meta->type() == INTS) {
             int v = *(int *)(value.data);
             memcpy(New_record.data() + field_meta->offset(), &v, field_meta->len());
@@ -874,6 +894,10 @@ RC Table::update_record(Trx *trx, Record *record, std::vector<const FieldMeta *>
           }
         } break;
         case FLOATS: {
+          int null_mask;
+          memcpy(&null_mask, New_record.data() + TableMeta::null_field_offset, sizeof(int32_t));
+          null_mask &= ~(1u << (field_idx - TableMeta::system_field_num));
+          memcpy(New_record.data() + TableMeta::null_field_offset, &null_mask, sizeof(int32_t));
           if (field_meta->type() == INTS) {
             int v = *(float *)(value.data);
             memcpy(New_record.data() + field_meta->offset(), &v, field_meta->len());
@@ -887,6 +911,10 @@ RC Table::update_record(Trx *trx, Record *record, std::vector<const FieldMeta *>
           }
         } break;
         case CHARS: {
+          int null_mask;
+          memcpy(&null_mask, New_record.data() + TableMeta::null_field_offset, sizeof(int32_t));
+          null_mask &= ~(1u << (field_idx - TableMeta::system_field_num));
+          memcpy(New_record.data() + TableMeta::null_field_offset, &null_mask, sizeof(int32_t));
           if (field_meta->type() != CHARS) {
             return RC::GENERIC_ERROR;
           }
@@ -894,6 +922,10 @@ RC Table::update_record(Trx *trx, Record *record, std::vector<const FieldMeta *>
           memcpy(New_record.data() + field_meta->offset(), s, field_meta->len());
         } break;
         case DATES: {
+          int null_mask;
+          memcpy(&null_mask, New_record.data() + TableMeta::null_field_offset, sizeof(int32_t));
+          null_mask &= ~(1u << (field_idx - TableMeta::system_field_num));
+          memcpy(New_record.data() + TableMeta::null_field_offset, &null_mask, sizeof(int32_t));
           int v = *(int *)(value.data);
           memcpy(New_record.data() + field_meta->offset(), &v, field_meta->len());
         } break;
